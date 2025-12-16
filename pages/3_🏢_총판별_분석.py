@@ -3,6 +3,12 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import sys
+import os
+
+# Add utils to path
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'utils'))
+from common_filters import apply_common_filters, show_filter_summary
 
 st.set_page_config(page_title="총판별 분석", page_icon="🏢", layout="wide")
 
@@ -12,33 +18,14 @@ if 'total_df' not in st.session_state or 'order_df' not in st.session_state:
     st.stop()
 
 total_df = st.session_state['total_df']
-order_df = st.session_state['order_df']
+order_df = st.session_state['order_df'].copy()
 
 st.title("🏢 총판별 상세 분석")
 st.markdown("---")
 
-# Sidebar Filters
-st.sidebar.header("🔍 필터 옵션")
-
-# Region Filter
-if '시도교육청' in order_df.columns:
-    regions = ['전체'] + sorted(order_df['시도교육청'].dropna().unique().tolist())
-    selected_region = st.sidebar.selectbox("지역 선택", regions)
-    
-    if selected_region != '전체':
-        filtered_order_df = order_df[order_df['시도교육청'] == selected_region].copy()
-    else:
-        filtered_order_df = order_df.copy()
-else:
-    filtered_order_df = order_df.copy()
-
-# Subject Filter
-if '과목명' in filtered_order_df.columns:
-    subjects = ['전체'] + sorted(filtered_order_df['과목명'].dropna().unique().tolist())
-    selected_subject = st.sidebar.selectbox("과목 선택", subjects)
-    
-    if selected_subject != '전체':
-        filtered_order_df = filtered_order_df[filtered_order_df['과목명'] == selected_subject]
+# Apply common filters
+filtered_order_df = apply_common_filters(order_df)
+show_filter_summary(filtered_order_df, st.session_state['order_df'])
 
 st.sidebar.markdown("---")
 st.sidebar.info(f"📊 필터링된 데이터: {len(filtered_order_df):,}건")

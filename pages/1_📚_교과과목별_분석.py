@@ -3,6 +3,12 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+import sys
+import os
+
+# Add utils to path
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'utils'))
+from common_filters import apply_common_filters, show_filter_summary
 
 st.set_page_config(page_title="교과/과목별 분석", page_icon="📚", layout="wide")
 
@@ -12,7 +18,7 @@ if 'total_df' not in st.session_state or 'order_df' not in st.session_state:
     st.stop()
 
 total_df = st.session_state['total_df']
-order_df = st.session_state['order_df']
+order_df = st.session_state['order_df'].copy()
 
 st.title("📚 교과/과목별 상세 분석")
 st.markdown("---")
@@ -26,27 +32,13 @@ if '학교급명' in order_df.columns:
     selected_school_level = st.sidebar.selectbox("학교급 선택", school_levels)
     
     if selected_school_level != '전체':
-        filtered_order_df = order_df[order_df['학교급명'] == selected_school_level].copy()
-    else:
-        filtered_order_df = order_df.copy()
-else:
-    filtered_order_df = order_df.copy()
+        order_df = order_df[order_df['학교급명'] == selected_school_level].copy()
 
-# Subject Group Filter
-if '교과군' in filtered_order_df.columns:
-    subject_groups = ['전체'] + sorted(filtered_order_df['교과군'].dropna().unique().tolist())
-    selected_subject_group = st.sidebar.selectbox("교과군 선택", subject_groups)
-    
-    if selected_subject_group != '전체':
-        filtered_order_df = filtered_order_df[filtered_order_df['교과군'] == selected_subject_group]
+# Apply common filters
+filtered_order_df = apply_common_filters(order_df)
 
-# Region Filter
-if '시도교육청' in filtered_order_df.columns:
-    regions = ['전체'] + sorted(filtered_order_df['시도교육청'].dropna().unique().tolist())
-    selected_region = st.sidebar.selectbox("지역 선택", regions)
-    
-    if selected_region != '전체':
-        filtered_order_df = filtered_order_df[filtered_order_df['시도교육청'] == selected_region]
+# Show filter summary
+show_filter_summary(filtered_order_df, st.session_state['order_df'])
 
 st.sidebar.markdown("---")
 st.sidebar.info(f"📊 필터링된 데이터: {len(filtered_order_df):,}건")
@@ -63,11 +55,11 @@ with col2:
     st.metric("총 주문 금액", f"{total_amount:,.0f}원")
 
 with col3:
-    unique_subjects = filtered_order_df['과목명'].nunique()
+    subject_col = '교과서명_구분' if '교과서명_구분' in filtered_order_df.columns else '교과서명'
+    unique_subjects = filtered_order_df[subject_col].nunique() if subject_col in filtered_order_df.columns else 0
     st.metric("과목 종류", f"{unique_subjects}개")
 
 st.markdown("---")
-
 # Tab Layout
 tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 과목별 현황", "📈 교과군 분석", "🏫 중등/고등 분석", "🎯 상세 분석", "📋 데이터 테이블"])
 

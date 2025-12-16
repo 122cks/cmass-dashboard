@@ -7,6 +7,21 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'utils'))
 from market_size import calculate_market_size_by_subject
 
+# Grade sorting function for distributors
+def get_grade_order(grade):
+    """Convert grade to number for sorting (S=1, A=2, B=3, C=4, D=5, E=6, etc.)"""
+    grade_map = {'S': 1, 'A': 2, 'B': 3, 'C': 4, 'D': 5, 'E': 6}
+    if pd.isna(grade):
+        return 999
+    return grade_map.get(str(grade).upper(), 99)
+
+def sort_by_grade(df, grade_column='총판등급'):
+    """Sort dataframe by distributor grade (S -> A -> B -> C -> D)"""
+    if grade_column in df.columns:
+        df['_grade_order'] = df[grade_column].apply(get_grade_order)
+        df = df.sort_values('_grade_order').drop('_grade_order', axis=1)
+    return df
+
 # Set page config
 st.set_page_config(
     page_title="CMASS 실적표 조회 시스템",
@@ -81,6 +96,57 @@ def load_data():
     if '정보공시학교코드' in order_df.columns:
         order_df['정보공시학교코드'] = order_df['정보공시학교코드'].astype(str)
     
+    # Merge product info to add school level to subject names
+    if not product_df.empty and '코드' in product_df.columns and '학교급' in product_df.columns:
+        # Create mapping from product code to school level
+        product_df['코드'] = product_df['코드'].astype(str)
+        order_df['코드'] = order_df['코드'].astype(str)
+        
+        # Merge to get school level
+        order_df = pd.merge(
+            order_df, 
+            product_df[['코드', '학교급', '교과군']].rename(columns={'교과군': '교과군_제품'}),
+            on='코드',
+            how='left'
+        )
+        
+        # Add school level to subject name for clarity (중등 정보 vs 고등 정보)
+        def add_school_level_to_subject(row):
+            if pd.notna(row.get('학교급')) and pd.notna(row.get('교과서명')):
+                school_level = row['학교급']
+                subject = str(row['교과서명'])
+                # Add prefix based on school level
+                if school_level == '중학교':
+                    return f"[중등] {subject}"
+                elif school_level == '고등학교':
+                    return f"[고등] {subject}"
+            return row.get('교과서명', '')
+        
+        order_df['교과서명_구분'] = order_df.apply(add_school_level_to_subject, axis=1)
+    else:
+        order_df['교과서명_구분'] = order_df.get('교과서명', '')
+    
+    # Map official distributor names (총판명(공식))
+    if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
+        # Create mapping from original name to official name
+        dist_map = {}
+        for _, row in distributor_df.iterrows():
+            for col in ['총판명', '총판명1']:
+                if col in distributor_df.columns and pd.notna(row.get(col)):
+                    dist_map[row[col]] = row['총판명(공식)']
+        
+        # Apply mapping to order data
+        if '총판' in order_df.columns:
+            order_df['총판_원본'] = order_df['총판']
+            order_df['총판'] = order_df['총판'].map(lambda x: dist_map.get(x, x) if pd.notna(x) else x)
+        
+        # Add distributor grade for sorting
+        grade_map = {}
+        for _, row in distributor_df.iterrows():
+            if pd.notna(row.get('총판명(공식)')) and pd.notna(row.get('등급')):
+                grade_map[row['총판명(공식)']] = row['등급']
+        order_df['총판등급'] = order_df['총판'].map(grade_map)
+    
     # Calculate accurate market size by subject
     market_analysis = calculate_market_size_by_subject(order_df, total_df, product_df)
 
@@ -97,6 +163,7 @@ try:
     st.session_state['product_df'] = product_df
     st.session_state['distributor_df'] = distributor_df
     st.session_state['market_analysis'] = market_analysis
+    st.session_state['sort_by_grade'] = sort_by_grade  # Store sorting function
 except FileNotFoundError as e:
     st.error(f"파일을 찾을 수 없습니다: {e}")
     st.stop()
@@ -131,7 +198,13 @@ with col3:
         st.metric("전체 점유율", f"{overall_share:.2f}%")
 
 with col4:
-    total_schools = order_df['학교코드'].nunique() if '학교코드' in order_df.columns else order_df['정보공시학교코드'].nunique()
+    # Count unique schools by school code
+    school_code_cols = ['학교코드', '정보공시학교코드', '정보공시 학교코드']
+    total_schools = 0
+    for col in school_code_cols:
+        if col in order_df.columns:
+            total_schools = order_df[col].dropna().nunique()
+            break
     st.metric("주문 학교 수", f"{total_schools:,}개교")
 
 st.markdown("---")

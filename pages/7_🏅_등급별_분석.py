@@ -11,37 +11,30 @@ if 'order_df' not in st.session_state:
     st.error("데이터를 불러올 수 없습니다. 메인 페이지로 돌아가주세요.")
     st.stop()
 
-order_df = st.session_state['order_df']
+order_df = st.session_state['order_df'].copy()
 distributor_df = st.session_state.get('distributor_df', pd.DataFrame())
 target_df = st.session_state.get('target_df', pd.DataFrame())
+sort_by_grade = st.session_state.get('sort_by_grade', None)
 
 st.title("🏅 등급별 총판 분석")
 st.markdown("---")
 
-# Merge distributor info with order data
-if not distributor_df.empty and '총판명' in distributor_df.columns and '등급' in distributor_df.columns:
-    # Create a mapping from distributor name to grade
-    grade_mapping = {}
-    for _, row in distributor_df.iterrows():
-        dist_name = str(row['총판명'])
-        grade = str(row.get('등급', '-'))
-        # Try to match with order_df distributors
-        matching = order_df[order_df['총판'].str.contains(dist_name.split(')')[0] if ')' in dist_name else dist_name, na=False, regex=False)]
-        if not matching.empty:
-            for dist in matching['총판'].unique():
-                grade_mapping[dist] = grade
-    
-    # Add grade column to order data
-    order_df['등급'] = order_df['총판'].map(grade_mapping).fillna('미분류')
-else:
+# Use existing grade column from order_df
+if '총판등급' not in order_df.columns:
     st.warning("총판 등급 정보가 없습니다. 기본 분석만 제공됩니다.")
     order_df['등급'] = '미분류'
+else:
+    order_df['등급'] = order_df['총판등급'].fillna('미분류')
 
 # Sidebar filters
 st.sidebar.header("🔍 필터 옵션")
 
-available_grades = sorted([g for g in order_df['등급'].unique() if g != '미분류'])
-if '미분류' in order_df['등급'].unique():
+# Sort grades: S, A, B, C, D, E, then others
+grade_order = ['S', 'A', 'B', 'C', 'D', 'E']
+all_grades = order_df['등급'].unique().tolist()
+available_grades = [g for g in grade_order if g in all_grades]
+available_grades += sorted([g for g in all_grades if g not in grade_order and g != '미분류'])
+if '미분류' in all_grades:
     available_grades.append('미분류')
 
 selected_grades = st.sidebar.multiselect(

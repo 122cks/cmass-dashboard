@@ -2,6 +2,12 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+import sys
+import os
+
+# Add utils to path
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'utils'))
+from common_filters import apply_common_filters, show_filter_summary
 
 st.set_page_config(page_title="지역별 분석", page_icon="🗺️", layout="wide")
 
@@ -92,6 +98,21 @@ else:
     filtered_order_df = order_df.copy()
 
 # School Level Filter
+if '학교급명' in filtered_order_df.columns:
+    school_levels = ['전체'] + sorted(filtered_order_df['학교급명'].dropna().unique().tolist())
+    selected_school_level = st.sidebar.selectbox("학교급 선택", school_levels)
+    
+    if selected_school_level != '전체':
+        filtered_order_df = filtered_order_df[filtered_order_df['학교급명'] == selected_school_level]
+        filtered_total_df = filtered_total_df[filtered_total_df.get('학교급명', filtered_total_df['학교급코드'].map({2: '초등학교', 3: '중학교', 4: '고등학교'})) == selected_school_level]
+
+# Apply common filters
+original_len = len(filtered_order_df)
+filtered_order_df = apply_common_filters(filtered_order_df, show_filters=['교과군', '과목'])
+show_filter_summary(filtered_order_df, order_df)
+
+st.sidebar.markdown("---")
+st.sidebar.info(f"📊 필터링된 데이터: {len(filtered_order_df):,}건")
 if '학교급코드' in filtered_total_df.columns:
     school_levels_code = sorted(filtered_total_df['학교급코드'].dropna().unique().tolist())
     school_level_names = {2: '초등학교', 3: '중학교', 4: '고등학교'}

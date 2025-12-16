@@ -55,19 +55,27 @@ with tab1:
     for dist in selected_distributors:
         dist_data = filtered_order[filtered_order['총판'] == dist]
         
+        # Determine school code column
+        school_code_col = '정보공시학교코드' if '정보공시학교코드' in dist_data.columns else '학교코드'
+        subject_col = '교과서명_구분' if '교과서명_구분' in dist_data.columns else '교과서명'
+        
         stats = {
             '총판': dist,
             '주문부수': dist_data['부수'].sum(),
             '주문금액': dist_data['금액'].sum() if '금액' in dist_data.columns else 0,
-            '거래학교수': dist_data['정보공시학교코드'].nunique() if '정보공시학교코드' in dist_data.columns else dist_data['학교코드'].nunique(),
-            '취급과목수': dist_data['과목명'].nunique(),
+            '거래학교수': dist_data[school_code_col].nunique() if school_code_col in dist_data.columns else 0,
+            '취급과목수': dist_data[subject_col].nunique() if subject_col in dist_data.columns else 0,
             '학교당평균': 0
         }
         stats['학교당평균'] = stats['주문부수'] / stats['거래학교수'] if stats['거래학교수'] > 0 else 0
         
         # Get target and grade info from distributor_df
         if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
-            dist_info = distributor_df[distributor_df['총판명'].str.contains(dist, na=False)]
+            # Match by official name
+            dist_info = distributor_df[distributor_df['총판명(공식)'] == dist]
+            if dist_info.empty:
+                # Try partial match
+                dist_info = distributor_df[distributor_df['총판명(공식)'].str.contains(dist.split(')')[-1], na=False)]
             if not dist_info.empty:
                 stats['등급'] = dist_info.iloc[0].get('등급', '-')
             else:
@@ -76,8 +84,13 @@ with tab1:
             stats['등급'] = '-'
         
         # Get target from target_df
-        if not target_df.empty:
-            target_info = target_df[target_df['총판명'].str.contains(dist, na=False)]
+        if not target_df.empty and '총판명' in target_df.columns:
+            # Try matching with official name
+            target_info = target_df[target_df['총판명'] == dist]
+            if target_info.empty:
+                # Try partial match
+                dist_name = dist.split(')')[-1] if ')' in dist else dist
+                target_info = target_df[target_df['총판명'].str.contains(dist_name, na=False)]
             if not target_info.empty:
                 target_str = str(target_info.iloc[0].get('전체목표 부수', '0'))
                 stats['목표부수'] = pd.to_numeric(target_str.replace(',', '').strip(), errors='coerce')
