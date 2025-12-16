@@ -200,10 +200,10 @@ with col3:
         st.metric("전체 점유율", f"{overall_share:.2f}%")
 
 with col4:
-    # Count unique schools by school code
-    school_code_cols = ['학교코드', '정보공시학교코드', '정보공시 학교코드']
+    # Count unique schools by preferred school code column (prefer 정보공시학교코드)
+    preferred_cols = ['정보공시학교코드', '정보공시 학교코드', '학교코드']
     total_schools = 0
-    for col in school_code_cols:
+    for col in preferred_cols:
         if col in order_df.columns:
             total_schools = order_df[col].dropna().nunique()
             break
