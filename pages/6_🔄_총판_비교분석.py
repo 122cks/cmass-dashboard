@@ -50,7 +50,11 @@ tab1, tab2, tab3, tab4 = st.tabs(["📊 종합 비교", "📈 실적 대비", "�
 with tab1:
     st.subheader("총판별 종합 성과 비교")
     
-    # Calculate comprehensive statistics
+    # Get market analysis data for accurate market size calculation
+    market_analysis = st.session_state.get('market_analysis', pd.DataFrame())
+    total_df = st.session_state.get('total_df', pd.DataFrame())
+    
+    # Calculate comprehensive statistics with market share
     comparison_stats = []
     for dist in selected_distributors:
         dist_data = filtered_order[filtered_order['총판'] == dist]
@@ -59,9 +63,22 @@ with tab1:
         school_code_col = '정보공시학교코드' if '정보공시학교코드' in dist_data.columns else '학교코드'
         subject_col = '교과서명_구분' if '교과서명_구분' in dist_data.columns else '교과서명'
         
+        # Calculate market size for this distributor's schools
+        # Get unique schools served by this distributor
+        school_codes = dist_data[school_code_col].unique() if school_code_col in dist_data.columns else []
+        
+        # Calculate total market size (student count) for these schools
+        if not total_df.empty and len(school_codes) > 0:
+            dist_schools = total_df[total_df['정보공시 학교코드'].isin(school_codes.astype(str))]
+            market_size = dist_schools['학생수(계)'].sum() if not dist_schools.empty else 0
+        else:
+            market_size = 0
+        
         stats = {
             '총판': dist,
             '주문부수': dist_data['부수'].sum(),
+            '시장규모': market_size,
+            '점유율(%)': (dist_data['부수'].sum() / market_size * 100) if market_size > 0 else 0,
             '주문금액': dist_data['금액'].sum() if '금액' in dist_data.columns else 0,
             '거래학교수': dist_data[school_code_col].nunique() if school_code_col in dist_data.columns else 0,
             '취급과목수': dist_data[subject_col].nunique() if subject_col in dist_data.columns else 0,
@@ -109,7 +126,7 @@ with tab1:
     
     comparison_df = pd.DataFrame(comparison_stats)
     
-    # Display metrics cards
+    # Display metrics cards with market share
     cols = st.columns(len(selected_distributors))
     for idx, (_, row) in enumerate(comparison_df.iterrows()):
         with cols[idx]:
@@ -119,6 +136,8 @@ with tab1:
                 <h4>{grade_color} {row['총판']}</h4>
                 <p><b>등급:</b> {row['등급']}</p>
                 <p><b>주문:</b> {row['주문부수']:,.0f}부</p>
+                <p><b>점유율:</b> {row['점유율(%)']:.2f}%</p>
+                <p><b>시장규모:</b> {row['시장규모']:,.0f}명</p>
                 <p><b>학교:</b> {row['거래학교수']}개교</p>
                 {f"<p><b>목표달성:</b> {row['목표달성률']:.1f}%</p>" if row['목표달성률'] > 0 else ""}
             </div>
@@ -130,8 +149,23 @@ with tab1:
     col1, col2 = st.columns(2)
     
     with col1:
-        # Bar chart - Order volume
+        # Bar chart - Market Share (점유율)
         fig1 = px.bar(
+            comparison_df,
+            x='총판',
+            y='점유율(%)',
+            title="총판별 시장 점유율 비교",
+            text='점유율(%)',
+            color='점유율(%)',
+            color_continuous_scale='Greens'
+        )
+        fig1.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+        fig1.update_layout(yaxis_title="점유율 (%)")
+        st.plotly_chart(fig1, use_container_width=True)
+    
+    with col2:
+        # Bar chart - Order volume
+        fig2 = px.bar(
             comparison_df,
             x='총판',
             y='주문부수',
@@ -140,14 +174,8 @@ with tab1:
             color='주문부수',
             color_continuous_scale='Blues'
         )
-        fig1.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-        st.plotly_chart(fig1, use_container_width=True)
-    
-    with col2:
-        # Bar chart - Schools
-        fig2 = px.bar(
-            comparison_df,
-            x='총판',
+        fig2.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+        st.plotly_chart(fig2, use_container_width=True)
             y='거래학교수',
             title="총판별 거래 학교 수 비교",
             text='거래학교수',

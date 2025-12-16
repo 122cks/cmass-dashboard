@@ -80,18 +80,34 @@ tab1, tab2, tab3, tab4 = st.tabs(["📊 등급별 현황", "📈 성과 비교",
 with tab1:
     st.subheader("등급별 총판 현황")
     
-    # Calculate statistics by grade
+    # Get total_df for market size calculation
+    total_df = st.session_state.get('total_df', pd.DataFrame())
+    
+    # Calculate statistics by grade with market share
     grade_stats = []
     for grade in selected_grades:
         grade_data = filtered_order[filtered_order['등급'] == grade]
+        
+        # Calculate market size for this grade's schools
+        school_code_col = '정보공시학교코드' if '정보공시학교코드' in grade_data.columns else '학교코드'
+        school_codes = grade_data[school_code_col].unique() if school_code_col in grade_data.columns else []
+        
+        # Calculate total market size (student count) for these schools
+        if not total_df.empty and len(school_codes) > 0:
+            grade_schools = total_df[total_df['정보공시 학교코드'].isin(school_codes.astype(str))]
+            market_size = grade_schools['학생수(계)'].sum() if not grade_schools.empty else 0
+        else:
+            market_size = 0
         
         stats = {
             '등급': grade,
             '총판수': grade_data['총판'].nunique(),
             '주문부수': grade_data['부수'].sum(),
+            '시장규모': market_size,
+            '점유율(%)': (grade_data['부수'].sum() / market_size * 100) if market_size > 0 else 0,
             '주문금액': grade_data['금액'].sum() if '금액' in grade_data.columns else 0,
-            '거래학교수': grade_data['정보공시학교코드'].nunique() if '정보공시학교코드' in grade_data.columns else grade_data['학교코드'].nunique(),
-            '취급과목수': grade_data['과목명'].nunique(),
+            '거래학교수': grade_data[school_code_col].nunique() if school_code_col in grade_data.columns else 0,
+            '취급과목수': grade_data['과목명'].nunique() if '과목명' in grade_data.columns else grade_data.get('교과서명_구분', grade_data.get('교과서명', pd.Series())).nunique(),
             '총판당평균': 0,
             '학교당평균': 0
         }
@@ -102,18 +118,20 @@ with tab1:
     
     grade_df = pd.DataFrame(grade_stats)
     
-    # Display grade cards
+    # Display grade cards with market share
     cols = st.columns(len(selected_grades))
     for idx, (_, row) in enumerate(grade_df.iterrows()):
         with cols[idx]:
-            grade_emoji = {'S': '🥇', 'A': '🥈', 'B': '🥉', 'C': '⭐', '미분류': '📍'}.get(row['등급'], '📌')
-            grade_color = {'S': '#FFD700', 'A': '#C0C0C0', 'B': '#CD7F32', 'C': '#4CAF50', '미분류': '#9E9E9E'}.get(row['등급'], '#4CAF50')
+            grade_emoji = {'S': '🥇', 'A': '🥈', 'B': '🥉', 'C': '⭐', 'D': '📌', '미분류': '📍'}.get(row['등급'], '📌')
+            grade_color = {'S': '#FFD700', 'A': '#C0C0C0', 'B': '#CD7F32', 'C': '#4CAF50', 'D': '#2196F3', '미분류': '#9E9E9E'}.get(row['등급'], '#4CAF50')
             
             st.markdown(f"""
             <div style="border: 3px solid {grade_color}; border-radius: 15px; padding: 20px; margin: 10px 0;">
                 <h2 style="text-align: center;">{grade_emoji} {row['등급']}</h2>
                 <p><b>총판 수:</b> {row['총판수']}개</p>
                 <p><b>주문:</b> {row['주문부수']:,.0f}부</p>
+                <p><b>점유율:</b> {row['점유율(%)']:.2f}%</p>
+                <p><b>시장규모:</b> {row['시장규모']:,.0f}명</p>
                 <p><b>학교:</b> {row['거래학교수']}개교</p>
                 <p><b>과목:</b> {row['취급과목수']}개</p>
             </div>
@@ -121,33 +139,36 @@ with tab1:
     
     st.markdown("---")
     
-    # Comparative charts
+    # Comparative charts with market share
     col1, col2 = st.columns(2)
     
     with col1:
-        # Bar chart - Total orders by grade
+        # Bar chart - Market Share by grade
         fig1 = px.bar(
+            grade_df,
+            x='등급',
+            y='점유율(%)',
+            title="등급별 시장 점유율",
+            text='점유율(%)',
+            color='등급',
+            color_discrete_map={'S': '#FFD700', 'A': '#C0C0C0', 'B': '#CD7F32', 'C': '#4CAF50', 'D': '#2196F3', '미분류': '#9E9E9E'}
+        )
+        fig1.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+        fig1.update_layout(yaxis_title="점유율 (%)")
+        st.plotly_chart(fig1, use_container_width=True)
+    
+    with col2:
+        # Bar chart - Total orders by grade
+        fig2 = px.bar(
             grade_df,
             x='등급',
             y='주문부수',
             title="등급별 총 주문 부수",
             text='주문부수',
             color='등급',
-            color_discrete_map={'S': '#FFD700', 'A': '#C0C0C0', 'B': '#CD7F32', 'C': '#4CAF50', '미분류': '#9E9E9E'}
+            color_discrete_map={'S': '#FFD700', 'A': '#C0C0C0', 'B': '#CD7F32', 'C': '#4CAF50', 'D': '#2196F3', '미분류': '#9E9E9E'}
         )
-        fig1.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-        st.plotly_chart(fig1, use_container_width=True)
-    
-    with col2:
-        # Pie chart - Distribution
-        fig2 = px.pie(
-            grade_df,
-            values='주문부수',
-            names='등급',
-            title="등급별 주문 비중",
-            color='등급',
-            color_discrete_map={'S': '#FFD700', 'A': '#C0C0C0', 'B': '#CD7F32', 'C': '#4CAF50', '미분류': '#9E9E9E'}
-        )
+        fig2.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
         st.plotly_chart(fig2, use_container_width=True)
     
     # Detailed metrics table
@@ -158,6 +179,8 @@ with tab1:
         grade_df.style.format({
             '총판수': '{:,.0f}',
             '주문부수': '{:,.0f}',
+            '점유율(%)': '{:.2f}',
+            '시장규모': '{:,.0f}',
             '주문금액': '{:,.0f}',
             '거래학교수': '{:,.0f}',
             '취급과목수': '{:,.0f}',
