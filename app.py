@@ -14,23 +14,61 @@ st.set_page_config(
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TOTAL_FILE = os.path.join(BASE_DIR, "2025년도_학년별·학급별 학생수(초중고)_전체.csv")
 ORDER_FILE = os.path.join(BASE_DIR, "씨마스_22개정 주문현황_학교코드총판코드.csv")
+TARGET_FILE = os.path.join(BASE_DIR, "22개정 총판별 목표.csv")
+PRODUCT_FILE = os.path.join(BASE_DIR, "제품정보.csv")
+DISTRIBUTOR_FILE = os.path.join(BASE_DIR, "총판정보.csv")
 
 @st.cache_data
 def load_data():
-    """Load and cache data files"""
+    """Load and cache all data files"""
+    # Load student data
     try:
         total_df = pd.read_csv(TOTAL_FILE, encoding='cp949')
     except UnicodeDecodeError:
         total_df = pd.read_csv(TOTAL_FILE, encoding='utf-8')
     
+    # Load order data
     try:
         order_df = pd.read_csv(ORDER_FILE, encoding='cp949')
     except UnicodeDecodeError:
         order_df = pd.read_csv(ORDER_FILE, encoding='utf-8')
+    
+    # Load target data
+    try:
+        target_df = pd.read_csv(TARGET_FILE, encoding='cp949')
+    except UnicodeDecodeError:
+        try:
+            target_df = pd.read_csv(TARGET_FILE, encoding='utf-8')
+        except:
+            target_df = pd.DataFrame()
+    
+    # Load product data
+    try:
+        product_df = pd.read_csv(PRODUCT_FILE, encoding='cp949')
+    except UnicodeDecodeError:
+        try:
+            product_df = pd.read_csv(PRODUCT_FILE, encoding='utf-8')
+        except:
+            product_df = pd.DataFrame()
+    
+    # Load distributor data
+    try:
+        distributor_df = pd.read_csv(DISTRIBUTOR_FILE, encoding='cp949')
+    except UnicodeDecodeError:
+        try:
+            distributor_df = pd.read_csv(DISTRIBUTOR_FILE, encoding='utf-8')
+        except:
+            distributor_df = pd.DataFrame()
 
     # Clean column names
     total_df.columns = total_df.columns.str.strip()
     order_df.columns = order_df.columns.str.strip()
+    if not target_df.empty:
+        target_df.columns = target_df.columns.str.strip()
+    if not product_df.empty:
+        product_df.columns = product_df.columns.str.strip()
+    if not distributor_df.empty:
+        distributor_df.columns = distributor_df.columns.str.strip()
 
     # Ensure School Codes are strings
     if '정보공시 학교코드' in total_df.columns:
@@ -38,15 +76,18 @@ def load_data():
     if '정보공시학교코드' in order_df.columns:
         order_df['정보공시학교코드'] = order_df['정보공시학교코드'].astype(str)
 
-    return total_df, order_df
+    return total_df, order_df, target_df, product_df, distributor_df
 
 # Load data
 try:
-    total_df, order_df = load_data()
+    total_df, order_df, target_df, product_df, distributor_df = load_data()
     
     # Store in session state for access across pages
     st.session_state['total_df'] = total_df
     st.session_state['order_df'] = order_df
+    st.session_state['target_df'] = target_df
+    st.session_state['product_df'] = product_df
+    st.session_state['distributor_df'] = distributor_df
 except FileNotFoundError as e:
     st.error(f"파일을 찾을 수 없습니다: {e}")
     st.stop()

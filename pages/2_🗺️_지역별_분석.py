@@ -16,35 +16,70 @@ order_df = st.session_state['order_df']
 st.title("🗺️ 지역별 상세 분석")
 st.markdown("---")
 
+# Add region classification helper function
+def classify_region_direction(region_name):
+    """Classify region into North/South based on name"""
+    if pd.isna(region_name):
+        return '미분류'
+    
+    region_str = str(region_name)
+    
+    # Northern regions
+    northern = ['서울', '인천', '경기', '강원', '대전', '세종', '충청북도', '충청남도', '충북', '충남']
+    # Southern regions  
+    southern = ['부산', '대구', '울산', '광주', '전라북도', '전라남도', '경상북도', '경상남도', '제주', '전북', '전남', '경북', '경남']
+    
+    for n in northern:
+        if n in region_str:
+            return '북도'
+    for s in southern:
+        if s in region_str:
+            return '남도'
+    
+    return '미분류'
+
+# Add region classification to dataframes
+if '시도교육청' in total_df.columns:
+    total_df['지역구분'] = total_df['시도교육청'].apply(classify_region_direction)
+if '시도교육청' in order_df.columns:
+    order_df['지역구분'] = order_df['시도교육청'].apply(classify_region_direction)
+
 # Sidebar Filters
 st.sidebar.header("🔍 필터 옵션")
 
+# Region Direction Filter (North/South)
+if '지역구분' in total_df.columns:
+    region_directions = ['전체'] + sorted(total_df['지역구분'].dropna().unique().tolist())
+    selected_direction = st.sidebar.selectbox("지역 구분", region_directions)
+    
+    if selected_direction != '전체':
+        filtered_total_df = total_df[total_df['지역구분'] == selected_direction].copy()
+        filtered_order_df = order_df[order_df['지역구분'] == selected_direction].copy()
+    else:
+        filtered_total_df = total_df.copy()
+        filtered_order_df = order_df.copy()
+else:
+    filtered_total_df = total_df.copy()
+    filtered_order_df = order_df.copy()
+
 # School Level Filter
-if '학교급코드' in total_df.columns:
-    school_levels_code = sorted(total_df['학교급코드'].dropna().unique().tolist())
+if '학교급코드' in filtered_total_df.columns:
+    school_levels_code = sorted(filtered_total_df['학교급코드'].dropna().unique().tolist())
     school_level_names = {2: '초등학교', 3: '중학교', 4: '고등학교'}
     school_options = ['전체'] + [school_level_names.get(code, f'학교급{code}') for code in school_levels_code]
     selected_school = st.sidebar.selectbox("학교급 선택", school_options)
     
     if selected_school != '전체':
         selected_code = [k for k, v in school_level_names.items() if v == selected_school][0]
-        filtered_total_df = total_df[total_df['학교급코드'] == selected_code].copy()
-    else:
-        filtered_total_df = total_df.copy()
-else:
-    filtered_total_df = total_df.copy()
-
+        filtered_total_df = filtered_total_df[filtered_total_df['학교급코드'] == selected_code].copy()
+    
 # Subject Filter
-if '과목명' in order_df.columns:
-    subjects = ['전체'] + sorted(order_df['과목명'].dropna().unique().tolist())
+if '과목명' in filtered_order_df.columns:
+    subjects = ['전체'] + sorted(filtered_order_df['과목명'].dropna().unique().tolist())
     selected_subject = st.sidebar.selectbox("과목 선택", subjects)
     
     if selected_subject != '전체':
-        filtered_order_df = order_df[order_df['과목명'] == selected_subject].copy()
-    else:
-        filtered_order_df = order_df.copy()
-else:
-    filtered_order_df = order_df.copy()
+        filtered_order_df = filtered_order_df[filtered_order_df['과목명'] == selected_subject].copy()
 
 st.sidebar.markdown("---")
 st.sidebar.info(f"📊 필터링된 학생: {filtered_total_df['학생수(계)'].sum():,.0f}명")
@@ -72,7 +107,7 @@ with col4:
 st.markdown("---")
 
 # Tab Layout
-tab1, tab2, tab3, tab4 = st.tabs(["🗺️ 시도별 분석", "🏫 교육청별 분석", "📊 학교급별 분석", "📋 상세 테이블"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["🗺️ 시도별 분석", "🏫 교육청별 분석", "📊 학교급별 분석", "🧭 남도/북도 비교", "📋 상세 테이블"])
 
 with tab1:
     st.subheader("시도교육청별 점유율 분석")
@@ -324,6 +359,144 @@ with tab3:
         st.plotly_chart(fig_heatmap, use_container_width=True)
 
 with tab4:
+    st.subheader("🧭 남도/북도 지역 비교")
+    
+    if '지역구분' in total_df.columns:
+        # Calculate statistics by region direction
+        direction_total = total_df.groupby('지역구분')['학생수(계)'].sum().reset_index()
+        direction_total.columns = ['지역구분', '전체학생수']
+        
+        direction_orders = order_df.groupby('지역구분')['부수'].sum().reset_index()
+        direction_orders.columns = ['지역구분', '주문부수']
+        
+        direction_stats = pd.merge(direction_total, direction_orders, on='지역구분', how='left').fillna(0)
+        direction_stats['점유율(%)'] = (direction_stats['주문부수'] / direction_stats['전체학생수']) * 100
+        direction_stats = direction_stats[direction_stats['지역구분'] != '미분류']
+        
+        # Metrics
+        col1, col2 = st.columns(2)
+        
+        for idx, row in direction_stats.iterrows():
+            with col1 if row['지역구분'] == '남도' else col2:
+                direction_emoji = '🌊' if row['지역구분'] == '남도' else '⛰️'
+                st.markdown(f"""
+                <div style="border: 3px solid {'#FF6B6B' if row['지역구분'] == '남도' else '#4ECDC4'}; 
+                            border-radius: 15px; padding: 20px; margin: 10px 0;">
+                    <h2 style="text-align: center;">{direction_emoji} {row['지역구분']}</h2>
+                    <p><b>전체 학생:</b> {row['전체학생수']:,.0f}명</p>
+                    <p><b>주문:</b> {row['주문부수']:,.0f}부</p>
+                    <p><b>점유율:</b> {row['점유율(%)']:.2f}%</p>
+                </div>
+                """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        
+        # Comparison charts
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Bar chart - Orders
+            fig1 = px.bar(
+                direction_stats,
+                x='지역구분',
+                y='주문부수',
+                title="남도/북도 주문량 비교",
+                text='주문부수',
+                color='지역구분',
+                color_discrete_map={'남도': '#FF6B6B', '북도': '#4ECDC4'}
+            )
+            fig1.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+            st.plotly_chart(fig1, use_container_width=True)
+        
+        with col2:
+            # Pie chart
+            fig2 = px.pie(
+                direction_stats,
+                values='주문부수',
+                names='지역구분',
+                title="남도/북도 주문 비중",
+                color='지역구분',
+                color_discrete_map={'남도': '#FF6B6B', '북도': '#4ECDC4'}
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+        
+        # Regional breakdown within north/south
+        st.markdown("---")
+        st.subheader("📍 남도/북도 내 시도별 분포")
+        
+        regional_direction = total_df.groupby(['지역구분', '시도교육청'])['학생수(계)'].sum().reset_index()
+        regional_direction_orders = order_df.groupby(['지역구분', '시도교육청'])['부수'].sum().reset_index()
+        
+        regional_direction = pd.merge(
+            regional_direction,
+            regional_direction_orders,
+            on=['지역구분', '시도교육청'],
+            how='left'
+        ).fillna(0)
+        regional_direction['점유율(%)'] = (regional_direction['부수'] / regional_direction['학생수(계)']) * 100
+        regional_direction = regional_direction[regional_direction['지역구분'] != '미분류']
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # South region breakdown
+            south_data = regional_direction[regional_direction['지역구분'] == '남도'].sort_values('부수', ascending=False)
+            fig_south = px.bar(
+                south_data,
+                x='시도교육청',
+                y='부수',
+                title="🌊 남도 지역 시도별 주문량",
+                text='부수',
+                color='점유율(%)',
+                color_continuous_scale='Reds'
+            )
+            fig_south.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+            fig_south.update_layout(xaxis_tickangle=-45)
+            st.plotly_chart(fig_south, use_container_width=True)
+        
+        with col2:
+            # North region breakdown
+            north_data = regional_direction[regional_direction['지역구분'] == '북도'].sort_values('부수', ascending=False)
+            fig_north = px.bar(
+                north_data,
+                x='시도교육청',
+                y='부수',
+                title="⛰️ 북도 지역 시도별 주문량",
+                text='부수',
+                color='점유율(%)',
+                color_continuous_scale='Blues'
+            )
+            fig_north.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+            fig_north.update_layout(xaxis_tickangle=-45)
+            st.plotly_chart(fig_north, use_container_width=True)
+        
+        # School level comparison
+        st.markdown("---")
+        st.subheader("📚 남도/북도 학교급별 비교")
+        
+        if '학교급코드' in total_df.columns:
+            school_level_names = {2: '초등학교', 3: '중학교', 4: '고등학교'}
+            
+            direction_school = total_df.groupby(['지역구분', '학교급코드'])['학생수(계)'].sum().reset_index()
+            direction_school['학교급'] = direction_school['학교급코드'].map(school_level_names)
+            direction_school = direction_school[direction_school['지역구분'] != '미분류']
+            
+            fig_school = px.bar(
+                direction_school,
+                x='학교급',
+                y='학생수(계)',
+                color='지역구분',
+                title="남도/북도 학교급별 학생 분포",
+                barmode='group',
+                text='학생수(계)',
+                color_discrete_map={'남도': '#FF6B6B', '북도': '#4ECDC4'}
+            )
+            fig_school.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+            st.plotly_chart(fig_school, use_container_width=True)
+    else:
+        st.info("지역 구분 데이터가 없습니다.")
+
+with tab5:
     st.subheader("📋 지역별 상세 데이터")
     
     # Display regional statistics table

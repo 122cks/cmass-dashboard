@@ -69,7 +69,7 @@ with col3:
 st.markdown("---")
 
 # Tab Layout
-tab1, tab2, tab3, tab4 = st.tabs(["📊 과목별 현황", "📈 교과군 분석", "🎯 상세 분석", "📋 데이터 테이블"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 과목별 현황", "📈 교과군 분석", "🏫 중등/고등 분석", "🎯 상세 분석", "📋 데이터 테이블"])
 
 with tab1:
     st.subheader("과목별 주문 현황")
@@ -188,7 +188,182 @@ with tab2:
         st.info("교과군 정보가 없습니다.")
 
 with tab3:
-    st.subheader("🎯 심화 분석")
+    st.subheader("� 중등/고등학교 상세 분석")
+    
+    # Get product info if available
+    product_df = st.session_state.get('product_df', pd.DataFrame())
+    
+    # Merge order data with product info to get school level
+    if not product_df.empty and '학교급' in product_df.columns and '코드' in product_df.columns:
+        # Merge with product data
+        order_with_level = pd.merge(
+            filtered_order_df,
+            product_df[['코드', '학교급', '교과군', '교과서명']].drop_duplicates(),
+            left_on='도서코드' if '도서코드' in filtered_order_df.columns else '과목코드',
+            right_on='코드',
+            how='left'
+        )
+    else:
+        order_with_level = filtered_order_df.copy()
+    
+    # School level comparison
+    if '학교급명' in filtered_order_df.columns:
+        school_levels = filtered_order_df['학교급명'].unique()
+        middle_high = [s for s in school_levels if '중학교' in str(s) or '고등학교' in str(s)]
+        
+        if middle_high:
+            # Statistics by school level
+            level_stats = filtered_order_df[filtered_order_df['학교급명'].isin(middle_high)].groupby('학교급명').agg({
+                '부수': 'sum',
+                '금액': 'sum' if '금액' in filtered_order_df.columns else 'count',
+                '과목명': 'nunique',
+                '학교코드': 'nunique' if '학교코드' in filtered_order_df.columns else 'count'
+            }).reset_index()
+            level_stats.columns = ['학교급', '주문부수', '주문금액', '과목수', '학교수']
+            
+            # Display metrics
+            cols = st.columns(len(middle_high))
+            for idx, (_, row) in enumerate(level_stats.iterrows()):
+                with cols[idx]:
+                    level_emoji = '🎓' if '중학교' in row['학교급'] else '🏫'
+                    st.markdown(f"""
+                    <div style="border: 2px solid {'#4A90E2' if '중학교' in row['학교급'] else '#E94B3C'}; 
+                                border-radius: 15px; padding: 20px; margin: 10px 0;">
+                        <h3 style="text-align: center;">{level_emoji} {row['학교급']}</h3>
+                        <p><b>주문:</b> {row['주문부수']:,.0f}부</p>
+                        <p><b>금액:</b> {row['주문금액']:,.0f}원</p>
+                        <p><b>과목:</b> {row['과목수']}개</p>
+                        <p><b>학교:</b> {row['학교수']}개교</p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            st.markdown("---")
+            
+            # Comparison charts
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Orders comparison
+                fig1 = px.bar(
+                    level_stats,
+                    x='학교급',
+                    y='주문부수',
+                    title="중등/고등 주문량 비교",
+                    text='주문부수',
+                    color='학교급',
+                    color_discrete_map={'중학교': '#4A90E2', '고등학교': '#E94B3C'}
+                )
+                fig1.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+                st.plotly_chart(fig1, use_container_width=True)
+            
+            with col2:
+                # Pie chart
+                fig2 = px.pie(
+                    level_stats,
+                    values='주문부수',
+                    names='학교급',
+                    title="중등/고등 주문 비중",
+                    color='학교급',
+                    color_discrete_map={'중학교': '#4A90E2', '고등학교': '#E94B3C'}
+                )
+                st.plotly_chart(fig2, use_container_width=True)
+            
+            # Subject comparison by school level
+            st.markdown("---")
+            st.subheader("📚 학교급별 과목 분석")
+            
+            subject_by_level = filtered_order_df[filtered_order_df['학교급명'].isin(middle_high)].groupby(['학교급명', '과목명'])['부수'].sum().reset_index()
+            
+            # Get top subjects for each level
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Middle school subjects
+                middle_subjects = subject_by_level[subject_by_level['학교급명'].str.contains('중학교', na=False)].sort_values('부수', ascending=False).head(10)
+                
+                if not middle_subjects.empty:
+                    fig_middle = px.bar(
+                        middle_subjects,
+                        x='과목명',
+                        y='부수',
+                        title="🎓 중학교 주요 과목 TOP 10",
+                        text='부수',
+                        color='부수',
+                        color_continuous_scale='Blues'
+                    )
+                    fig_middle.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+                    fig_middle.update_layout(xaxis_tickangle=-45, showlegend=False)
+                    st.plotly_chart(fig_middle, use_container_width=True)
+                else:
+                    st.info("중학교 데이터가 없습니다.")
+            
+            with col2:
+                # High school subjects
+                high_subjects = subject_by_level[subject_by_level['학교급명'].str.contains('고등학교', na=False)].sort_values('부수', ascending=False).head(10)
+                
+                if not high_subjects.empty:
+                    fig_high = px.bar(
+                        high_subjects,
+                        x='과목명',
+                        y='부수',
+                        title="🏫 고등학교 주요 과목 TOP 10",
+                        text='부수',
+                        color='부수',
+                        color_continuous_scale='Reds'
+                    )
+                    fig_high.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+                    fig_high.update_layout(xaxis_tickangle=-45, showlegend=False)
+                    st.plotly_chart(fig_high, use_container_width=True)
+                else:
+                    st.info("고등학교 데이터가 없습니다.")
+            
+            # Regional distribution by school level
+            st.markdown("---")
+            st.subheader("🗺️ 학교급별 지역 분포")
+            
+            if '시도교육청' in filtered_order_df.columns:
+                regional_level = filtered_order_df[filtered_order_df['학교급명'].isin(middle_high)].groupby(['시도교육청', '학교급명'])['부수'].sum().reset_index()
+                
+                fig_regional = px.bar(
+                    regional_level,
+                    x='시도교육청',
+                    y='부수',
+                    color='학교급명',
+                    title="중등/고등 지역별 분포",
+                    barmode='group',
+                    text='부수',
+                    color_discrete_map={'중학교': '#4A90E2', '고등학교': '#E94B3C'}
+                )
+                fig_regional.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+                fig_regional.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig_regional, use_container_width=True)
+            
+            # Subject group comparison
+            st.markdown("---")
+            st.subheader("📖 학교급별 교과군 비교")
+            
+            if '교과군' in filtered_order_df.columns:
+                group_level = filtered_order_df[filtered_order_df['학교급명'].isin(middle_high)].groupby(['교과군', '학교급명'])['부수'].sum().reset_index()
+                
+                # Heatmap
+                pivot_group_level = group_level.pivot(index='교과군', columns='학교급명', values='부수').fillna(0)
+                
+                fig_heatmap = px.imshow(
+                    pivot_group_level,
+                    title="교과군 × 학교급 주문량 히트맵",
+                    labels=dict(x="학교급", y="교과군", color="주문량"),
+                    aspect="auto",
+                    color_continuous_scale='YlOrRd'
+                )
+                fig_heatmap.update_layout(height=500)
+                st.plotly_chart(fig_heatmap, use_container_width=True)
+        else:
+            st.info("중학교/고등학교 데이터가 없습니다.")
+    else:
+        st.info("학교급 정보가 없습니다.")
+
+with tab4:
+    st.subheader("�🎯 심화 분석")
     
     col1, col2 = st.columns(2)
     
