@@ -7,6 +7,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'utils'))
 from market_size import calculate_market_size_by_subject
 from market_size_v2 import calculate_market_size_by_subject_v2
+from market_size_distributor import calculate_distributor_market_size, calculate_subject_market_by_distributor
 
 # Grade sorting function for distributors
 def get_grade_order(grade):
@@ -97,6 +98,28 @@ def load_data():
     if '정보공시학교코드' in order_df.columns:
         order_df['정보공시학교코드'] = order_df['정보공시학교코드'].astype(str)
     
+    # Map distributor official names from total_df to use 총판명(공식)
+    # Create mapping: 담당총판 -> 총판명(공식)
+    if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
+        # Create mapping from various distributor name formats to official name
+        dist_official_map = {}
+        for _, row in distributor_df.iterrows():
+            official_name = row.get('총판명(공식)', '')
+            if pd.notna(official_name):
+                # Map from 총판명, 총판명1, etc.
+                for col in ['총판명', '총판명1']:
+                    if col in distributor_df.columns and pd.notna(row.get(col)):
+                        dist_official_map[str(row[col])] = official_name
+        
+        # Update total_df's 담당총판 to use official names
+        if '담당총판' in total_df.columns:
+            total_df['담당총판_공식'] = total_df['담당총판'].map(lambda x: dist_official_map.get(str(x), x) if pd.notna(x) else x)
+        
+        # Update order_df's 총판 to use official names
+        if '총판' in order_df.columns:
+            order_df['총판_원본'] = order_df['총판']
+            order_df['총판'] = order_df['총판'].map(lambda x: dist_official_map.get(str(x), x) if pd.notna(x) else x)
+    
     # Merge product info to add school level to subject names
     if (not product_df.empty and '코드' in product_df.columns and '학교급' in product_df.columns
             and '도서코드(교지명구분)' in order_df.columns):
@@ -139,26 +162,14 @@ def load_data():
         # If product code missing in order data, fall back to original subject name
         order_df['교과서명_구분'] = order_df.get('교과서명', '')
     
-    # Map official distributor names (총판명(공식))
-    if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
-        # Create mapping from original name to official name
-        dist_map = {}
-        for _, row in distributor_df.iterrows():
-            for col in ['총판명', '총판명1']:
-                if col in distributor_df.columns and pd.notna(row.get(col)):
-                    dist_map[row[col]] = row['총판명(공식)']
-        
-        # Apply mapping to order data
-        if '총판' in order_df.columns:
-            order_df['총판_원본'] = order_df['총판']
-            order_df['총판'] = order_df['총판'].map(lambda x: dist_map.get(x, x) if pd.notna(x) else x)
-        
-        # Add distributor grade for sorting
+    # Add distributor grade for sorting (using already mapped official names)
+    if not distributor_df.empty and '총판명(공식)' in distributor_df.columns and '등급' in distributor_df.columns:
         grade_map = {}
         for _, row in distributor_df.iterrows():
             if pd.notna(row.get('총판명(공식)')) and pd.notna(row.get('등급')):
                 grade_map[row['총판명(공식)']] = row['등급']
-        order_df['총판등급'] = order_df['총판'].map(grade_map)
+        if '총판' in order_df.columns:
+            order_df['총판등급'] = order_df['총판'].map(grade_map)
     
     # Calculate accurate market size by subject (V2: 학교별 학년 추정)
     market_analysis = calculate_market_size_by_subject_v2(order_df, total_df, product_df)
@@ -166,6 +177,12 @@ def load_data():
     # Fallback to V1 if V2 fails
     if market_analysis.empty:
         market_analysis = calculate_market_size_by_subject(order_df, total_df, product_df)
+    
+    # Calculate distributor market size (총판별 담당 학교 기준)
+    distributor_market = calculate_distributor_market_size(total_df, order_df, distributor_df)
+    
+    # Calculate subject market by distributor (총판별 과목별 시장 규모)
+    subject_market_by_dist = calculate_subject_market_by_distributor(total_df, order_df, product_df)
     
     # Calculate total market size by school level for comparison analysis
     # 중등 = 중학교 1,2학년 / 고등 = 고등학교 1,2학년
@@ -182,11 +199,11 @@ def load_data():
         # 전체
         market_size_by_level['전체'] = market_size_by_level['중등'] + market_size_by_level['고등']
 
-    return total_df, order_df, target_df, product_df, distributor_df, market_analysis, market_size_by_level
+    return total_df, order_df, target_df, product_df, distributor_df, market_analysis, market_size_by_level, distributor_market, subject_market_by_dist
 
 # Load data
 try:
-    total_df, order_df, target_df, product_df, distributor_df, market_analysis, market_size_by_level = load_data()
+    total_df, order_df, target_df, product_df, distributor_df, market_analysis, market_size_by_level, distributor_market, subject_market_by_dist = load_data()
     
     # Store in session state for access across pages
     st.session_state['total_df'] = total_df
@@ -196,6 +213,8 @@ try:
     st.session_state['distributor_df'] = distributor_df
     st.session_state['market_analysis'] = market_analysis
     st.session_state['market_size_by_level'] = market_size_by_level  # Store market size by school level
+    st.session_state['distributor_market'] = distributor_market  # Store distributor market size
+    st.session_state['subject_market_by_dist'] = subject_market_by_dist  # Store subject market by distributor
     st.session_state['sort_by_grade'] = sort_by_grade  # Store sorting function
 except FileNotFoundError as e:
     st.error(f"파일을 찾을 수 없습니다: {e}")
@@ -482,6 +501,53 @@ with tab2:
 
 with tab3:
     st.subheader("💡 전략적 인사이트")
+    
+    # 총판별 시장 규모 정보 표시
+    if 'distributor_market' in st.session_state and not st.session_state['distributor_market'].empty:
+        st.markdown("#### 🏢 총판별 시장 현황 (담당 학교 기준)")
+        
+        dist_market_df = st.session_state['distributor_market']
+        
+        # TOP 10 총판 표시
+        top_dists = dist_market_df.nlargest(10, '점유율(%)')
+        
+        col1, col2 = st.columns([3, 2])
+        
+        with col1:
+            fig = go.Figure()
+            fig.add_trace(go.Bar(
+                name='점유율',
+                x=top_dists['총판명'],
+                y=top_dists['점유율(%)'],
+                marker_color='#667eea',
+                text=top_dists['점유율(%)'].apply(lambda x: f'{x:.1f}%'),
+                textposition='outside',
+                hovertemplate='<b>%{x}</b><br>점유율: %{y:.2f}%<br>시장규모: %{customdata:,.0f}명<extra></extra>',
+                customdata=top_dists['전체_시장규모']
+            ))
+            
+            fig.update_layout(
+                title="총판별 시장 점유율 TOP 10 (담당 학교 기준)",
+                xaxis_title="",
+                yaxis_title="점유율 (%)",
+                height=400,
+                showlegend=False,
+                xaxis_tickangle=-45
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            st.markdown("**📊 총판별 시장 요약**")
+            for idx, row in top_dists.head(5).iterrows():
+                st.markdown(f"""
+                **{row['총판명']}**
+                - 시장규모: {row['전체_시장규모']:,.0f}명
+                - 주문부수: {row['주문부수']:,.0f}부
+                - 점유율: {row['점유율(%)']:.2f}%
+                - 담당학교: {row['담당_전체학교수']}개교
+                """)
+        
+        st.markdown("---")
     
     col1, col2 = st.columns(2)
     
