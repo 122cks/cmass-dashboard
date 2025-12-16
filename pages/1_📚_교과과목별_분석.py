@@ -61,7 +61,7 @@ with col3:
 
 st.markdown("---")
 # Tab Layout
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 과목별 현황", "📈 교과군 분석", "🏫 중등/고등 분석", "🎯 상세 분석", "📋 데이터 테이블"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 과목별 현황", "📈 교과군 분석", "🏫 중등/고등 분석", "🎯 상세 분석", "💡 성과 인사이트", "📋 데이터 테이블"])
 
 with tab1:
     st.subheader("과목별 주문 현황")
@@ -433,7 +433,94 @@ with tab4:
         else:
             st.info("히트맵을 표시할 데이터가 충분하지 않습니다.")
 
-with tab4:
+with tab5:
+    st.subheader("💡 성과 인사이트 및 분석")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### 🏆 상위 성과 과목 (TOP 5)")
+        top5 = subject_stats.head(5)
+        
+        for idx, row in top5.iterrows():
+            # Performance card with gradient
+            efficiency_score = row['학교당평균'] if '학교당평균' in row else 0
+            color = "#28a745" if row['점유율(%)'] > 50 else "#ffc107" if row['점유율(%)'] > 30 else "#dc3545"
+            
+            st.markdown(f"""
+            <div style='background: linear-gradient(135deg, {color}20 0%, {color}40 100%); 
+                        padding: 15px; border-radius: 8px; margin-bottom: 10px;
+                        border-left: 4px solid {color};'>
+                <h4 style='margin:0; color: {color};'>{row['과목명']}</h4>
+                <p style='margin: 5px 0;'>
+                    <b>주문 부수:</b> {row['주문부수']:,.0f}부 | 
+                    <b>점유율:</b> {row['점유율(%)']:.1f}%
+                </p>
+                <p style='margin: 5px 0;'>
+                    <b>학교 수:</b> {row['학교수']:,.0f}개 | 
+                    <b>학교당 평균:</b> {efficiency_score:.1f}부
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        st.markdown("#### 📊 성과 분석 지표")
+        
+        # Performance metrics
+        high_performers = len(subject_stats[subject_stats['점유율(%)'] > 50])
+        mid_performers = len(subject_stats[(subject_stats['점유율(%)'] >= 30) & (subject_stats['점유율(%)'] <= 50)])
+        low_performers = len(subject_stats[subject_stats['점유율(%)'] < 30])
+        
+        metric_col1, metric_col2, metric_col3 = st.columns(3)
+        metric_col1.metric("우수 (50%↑)", f"{high_performers}개", help="점유율 50% 이상")
+        metric_col2.metric("보통 (30~50%)", f"{mid_performers}개", help="점유율 30~50%")
+        metric_col3.metric("개선 필요 (30%↓)", f"{low_performers}개", help="점유율 30% 미만")
+    
+    with col2:
+        st.markdown("#### ⚠️ 개선 필요 과목 (하위 5)")
+        bottom5 = subject_stats.tail(5).sort_values('주문부수', ascending=True)
+        
+        for idx, row in bottom5.iterrows():
+            st.markdown(f"""
+            <div style='background: #fff3cd; padding: 12px; border-radius: 8px; 
+                        margin-bottom: 10px; border-left: 4px solid #ffc107;'>
+                <p style='margin:0;'><b>{row['과목명']}</b></p>
+                <p style='margin: 5px 0; font-size: 0.9em;'>
+                    주문: {row['주문부수']:,.0f}부 | 점유율: {row['점유율(%)']:.1f}% | 
+                    학교: {row['학교수']:,.0f}개
+                </p>
+                <p style='margin: 0; font-size: 0.85em; color: #856404;'>
+                    💡 개선 포인트: 학교 침투율 제고 필요
+                </p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        st.markdown("---")
+        st.markdown("#### 🎯 전략적 제안")
+        
+        # Strategic recommendations
+        avg_share = subject_stats['점유율(%)'].mean()
+        avg_schools = subject_stats['학교수'].mean()
+        
+        st.info(f"""
+        **평균 점유율**: {avg_share:.1f}%  
+        **평균 주문 학교 수**: {avg_schools:.0f}개
+        
+        **권장 액션**:
+        - 상위 과목: 시장 선도 지위 유지 및 확대
+        - 중위 과목: 경쟁력 강화 및 차별화 전략
+        - 하위 과목: 침투율 개선 및 마케팅 강화
+        """)
+        
+        # Competition intensity
+        st.markdown("#### 🔥 경쟁 강도 분석")
+        subject_stats_sorted = subject_stats.copy()
+        subject_stats_sorted['경쟁강도'] = subject_stats_sorted['학교수'] / subject_stats_sorted['주문부수'] * 10000
+        high_competition = subject_stats_sorted.nsmallest(5, '경쟁강도')
+        
+        st.warning(f"🔥 **고강도 경쟁 과목**: {', '.join(high_competition['과목명'].head(3).tolist())}")
+
+with tab6:
     st.subheader("📋 상세 데이터 테이블")
     
     # Search functionality

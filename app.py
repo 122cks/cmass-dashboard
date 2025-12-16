@@ -203,18 +203,23 @@ except Exception as e:
 
 # Main Page - Dashboard
 st.title("📊 22개정 자사 실적표 조회 시스템")
+st.markdown("### 💼 Executive Dashboard")
 st.markdown("---")
 
-# Create metrics row
-col1, col2, col3, col4 = st.columns(4)
+# Key Performance Indicators - Enhanced
+col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
     total_students = total_df['학생수(계)'].sum()
-    st.metric("2025년 전체 학생수", f"{total_students:,.0f}명")
+    st.metric("2025년 전체 학생수", f"{total_students:,.0f}명", 
+             help="전국 중·고등학교 전체 학생수")
 
 with col2:
     total_orders = order_df['부수'].sum()
-    st.metric("2026년용 주문 부수", f"{total_orders:,.0f}부")
+    total_revenue = order_df['금액'].sum() if '금액' in order_df.columns else 0
+    st.metric("2026년용 주문 부수", f"{total_orders:,.0f}부",
+             delta=f"₩{total_revenue/100000000:.1f}억원",
+             help="총 주문 부수 및 매출액")
 
 with col3:
     # Calculate accurate overall share from market_analysis
@@ -235,7 +240,60 @@ with col4:
         if col in order_df.columns:
             total_schools = order_df[col].dropna().nunique()
             break
-    st.metric("주문 학교 수", f"{total_schools:,}개교")
+    penetration_rate = (total_schools / total_df['학교명'].nunique() * 100) if not total_df.empty else 0
+    st.metric("주문 학교 수", f"{total_schools:,}개교",
+             delta=f"침투율 {penetration_rate:.1f}%",
+             help="우리 교과서를 주문한 학교 수")
+
+with col5:
+    # Average order per school
+    avg_per_school = total_orders / total_schools if total_schools > 0 else 0
+    st.metric("학교당 평균", f"{avg_per_school:,.0f}부",
+             help="주문 학교당 평균 주문 부수")
+
+st.markdown("---")
+
+# Performance Dashboard Cards
+st.header("🎯 핵심 성과 지표 (KPI)")
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); 
+                padding: 20px; border-radius: 10px; color: white;'>
+        <h3 style='margin:0; color: white;'>📚 교과 다양성</h3>
+        <p style='font-size: 2em; margin: 10px 0; font-weight: bold;'>
+            {subjects}개
+        </p>
+        <p style='margin:0; opacity: 0.9;'>취급 과목 종류</p>
+    </div>
+    """.format(subjects=order_df['과목명'].nunique()), unsafe_allow_html=True)
+
+with col2:
+    num_distributors = order_df['총판'].nunique() if '총판' in order_df.columns else 0
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
+                padding: 20px; border-radius: 10px; color: white;'>
+        <h3 style='margin:0; color: white;'>🏢 유통 네트워크</h3>
+        <p style='font-size: 2em; margin: 10px 0; font-weight: bold;'>
+            {dist}개
+        </p>
+        <p style='margin:0; opacity: 0.9;'>협력 총판사</p>
+    </div>
+    """.format(dist=num_distributors), unsafe_allow_html=True)
+
+with col3:
+    num_regions = order_df['시도교육청'].nunique() if '시도교육청' in order_df.columns else 0
+    st.markdown("""
+    <div style='background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
+                padding: 20px; border-radius: 10px; color: white;'>
+        <h3 style='margin:0; color: white;'>🗺️ 지역 커버리지</h3>
+        <p style='font-size: 2em; margin: 10px 0; font-weight: bold;'>
+            {regions}개
+        </p>
+        <p style='margin:0; opacity: 0.9;'>시도교육청</p>
+    </div>
+    """.format(regions=num_regions), unsafe_allow_html=True)
 
 st.markdown("---")
 
@@ -245,16 +303,39 @@ st.caption("💡 2025년 주문한 교과서는 2026년에 사용합니다. 현�
 st.info("⚠️ 과목명의 숫자(1, 2)는 학기를 의미합니다. 예: 한국사 1 = 1학기, 한국사 2 = 2학기 (학년 아님)")
 
 if not market_analysis.empty:
-    col1, col2 = st.columns([2, 1])
+    col1, col2, col3 = st.columns([2, 1, 1])
     
     with col1:
-        # Top subjects by accurate market share
-        top_accurate = market_analysis.nlargest(10, '점유율(%)')
-        st.subheader("📚 과목별 정확 점유율 TOP 10")
-        for idx, row in top_accurate.iterrows():
-            grade_info = f" ({row['대상학년']})" if row['대상학년'] != '전체' else " (전 학년)"
-            st.write(f"{top_accurate.index.tolist().index(idx) + 1}. **{row['과목명']}**{grade_info}: "
-                    f"{row['점유율(%)']:.2f}% | 시장: {row['시장규모(학생수)']:,.0f}명 | 주문: {row['주문부수']:,.0f}부")
+        # Top subjects by accurate market share - Enhanced visualization
+        top_accurate = market_analysis.nlargest(15, '점유율(%)')
+        
+        import plotly.express as px
+        import plotly.graph_objects as go
+        
+        fig = go.Figure()
+        
+        # Add bar for market share
+        fig.add_trace(go.Bar(
+            name='점유율',
+            x=top_accurate['과목명'],
+            y=top_accurate['점유율(%)'],
+            marker_color='#667eea',
+            text=top_accurate['점유율(%)'].apply(lambda x: f'{x:.1f}%'),
+            textposition='outside',
+            hovertemplate='<b>%{x}</b><br>점유율: %{y:.2f}%<extra></extra>'
+        ))
+        
+        fig.update_layout(
+            title="📚 과목별 점유율 TOP 15 (정확 시장 규모 기준)",
+            xaxis_title="",
+            yaxis_title="점유율 (%)",
+            height=400,
+            showlegend=False,
+            xaxis_tickangle=-45,
+            hovermode='x unified'
+        )
+        
+        st.plotly_chart(fig, use_container_width=True)
     
     with col2:
         st.subheader("🎯 시장 분석 요약")
@@ -266,40 +347,210 @@ if not market_analysis.empty:
         
         total_market_size = market_analysis['시장규모(학생수)'].sum()
         st.metric("전체 대상 시장", f"{total_market_size:,.0f}명")
+        
+        # Market concentration
+        top5_share = market_analysis.nlargest(5, '주문부수')['주문부수'].sum()
+        concentration = (top5_share / total_orders * 100) if total_orders > 0 else 0
+        st.metric("TOP5 집중도", f"{concentration:.1f}%",
+                 help="상위 5개 과목의 주문 비중")
+    
+    with col3:
+        st.subheader("📈 점유율 분포")
+        
+        # Distribution analysis
+        ranges = [
+            ('80% 이상', len(market_analysis[market_analysis['점유율(%)'] >= 80])),
+            ('60-80%', len(market_analysis[(market_analysis['점유율(%)'] >= 60) & (market_analysis['점유율(%)'] < 80)])),
+            ('40-60%', len(market_analysis[(market_analysis['점유율(%)'] >= 40) & (market_analysis['점유율(%)'] < 60)])),
+            ('20-40%', len(market_analysis[(market_analysis['점유율(%)'] >= 20) & (market_analysis['점유율(%)'] < 40)])),
+            ('20% 미만', len(market_analysis[market_analysis['점유율(%)'] < 20]))
+        ]
+        
+        for label, count in ranges:
+            if count > 0:
+                st.write(f"**{label}**: {count}개 과목")
 else:
     st.info("시장 분석 데이터를 계산중입니다...")
 
 st.markdown("---")
 
-# Quick Overview Section
-st.header("📈 주요 지표 개요")
+# Trend Analysis Section
+st.header("📈 실적 분석 & 인사이트")
 
-col1, col2 = st.columns(2)
+tab1, tab2, tab3 = st.tabs(["🏆 TOP 성과", "📊 학교급별 분석", "🎯 전략적 인사이트"])
 
-with col1:
-    st.subheader("교과/과목별 TOP 5")
-    subject_top = order_df.groupby('과목명')['부수'].sum().sort_values(ascending=False).head(5)
-    for idx, (subject, count) in enumerate(subject_top.items(), 1):
-        st.write(f"{idx}. **{subject}**: {count:,}부")
+with tab1:
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("📚 교과/과목별 TOP 10")
+        subject_col = '교과서명_구분' if '교과서명_구분' in order_df.columns else '과목명'
+        subject_top = order_df.groupby(subject_col)['부수'].sum().sort_values(ascending=False).head(10)
+        
+        fig = px.bar(
+            x=subject_top.values,
+            y=subject_top.index,
+            orientation='h',
+            text=subject_top.values,
+            color=subject_top.values,
+            color_continuous_scale='Blues'
+        )
+        fig.update_traces(texttemplate='%{text:,.0f}부', textposition='outside')
+        fig.update_layout(
+            showlegend=False,
+            height=400,
+            xaxis_title="주문 부수",
+            yaxis_title="",
+            margin=dict(l=200)
+        )
+        st.plotly_chart(fig, use_container_width=True)
+        
+    with col2:
+        st.subheader("🗺️ 지역별 TOP 10")
+        region_top = order_df.groupby('시도교육청')['부수'].sum().sort_values(ascending=False).head(10)
+        
+        fig = px.bar(
+            x=region_top.values,
+            y=region_top.index,
+            orientation='h',
+            text=region_top.values,
+            color=region_top.values,
+            color_continuous_scale='Greens'
+        )
+        fig.update_traces(texttemplate='%{text:,.0f}부', textposition='outside')
+        fig.update_layout(
+            showlegend=False,
+            height=400,
+            xaxis_title="주문 부수",
+            yaxis_title=""
+        )
+        st.plotly_chart(fig, use_container_width=True)
 
-with col2:
-    st.subheader("지역별 TOP 5")
-    region_top = order_df.groupby('시도교육청')['부수'].sum().sort_values(ascending=False).head(5)
-    for idx, (region, count) in enumerate(region_top.items(), 1):
-        st.write(f"{idx}. **{region}**: {count:,}부")
+with tab2:
+    if '학교급명' in order_df.columns:
+        school_level_stats = order_df.groupby('학교급명').agg({
+            '부수': 'sum',
+            '금액': 'sum' if '금액' in order_df.columns else 'count',
+            '정보공시학교코드': 'nunique' if '정보공시학교코드' in order_df.columns else 'count',
+            '과목명': 'nunique'
+        }).reset_index()
+        school_level_stats.columns = ['학교급', '주문부수', '주문금액', '학교수', '과목수']
+        school_level_stats['학교당평균'] = school_level_stats['주문부수'] / school_level_stats['학교수']
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig = px.pie(
+                school_level_stats,
+                values='주문부수',
+                names='학교급',
+                title='학교급별 주문 부수 분포',
+                hole=0.4
+            )
+            fig.update_traces(textposition='inside', textinfo='percent+label')
+            st.plotly_chart(fig, use_container_width=True)
+        
+        with col2:
+            fig = px.bar(
+                school_level_stats,
+                x='학교급',
+                y='학교당평균',
+                title='학교급별 학교당 평균 주문 부수',
+                text='학교당평균',
+                color='학교당평균',
+                color_continuous_scale='Viridis'
+            )
+            fig.update_traces(texttemplate='%{text:,.0f}부', textposition='outside')
+            fig.update_layout(showlegend=False, height=400)
+            st.plotly_chart(fig, use_container_width=True)
+        
+        # Detailed table
+        st.subheader("📋 학교급별 상세 지표")
+        st.dataframe(
+            school_level_stats.style.format({
+                '주문부수': '{:,.0f}',
+                '주문금액': '{:,.0f}',
+                '학교수': '{:,.0f}',
+                '과목수': '{:,.0f}',
+                '학교당평균': '{:,.1f}'
+            }),
+            use_container_width=True
+        )
+
+with tab3:
+    st.subheader("💡 전략적 인사이트")
+    
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("#### 🎯 강점 분야")
+        if not market_analysis.empty:
+            strong_subjects = market_analysis[market_analysis['점유율(%)'] > 60].sort_values('점유율(%)', ascending=False)
+            if len(strong_subjects) > 0:
+                st.success(f"✅ **{len(strong_subjects)}개 과목**에서 60% 이상 점유율 달성")
+                for idx, row in strong_subjects.head(5).iterrows():
+                    st.write(f"• {row['과목명']}: **{row['점유율(%)']:.1f}%**")
+            else:
+                st.info("60% 이상 점유율 과목이 없습니다.")
+        
+        st.markdown("#### 📊 총판 효율성")
+        if '총판' in order_df.columns:
+            dist_efficiency = order_df.groupby('총판').agg({
+                '부수': 'sum',
+                '정보공시학교코드': 'nunique' if '정보공시학교코드' in order_df.columns else 'count'
+            })
+            dist_efficiency['효율성'] = dist_efficiency['부수'] / dist_efficiency['정보공시학교코드']
+            top_efficient = dist_efficiency.nlargest(3, '효율성')
+            st.info(f"📌 가장 효율적인 총판: **{top_efficient.index[0]}** (학교당 {top_efficient.iloc[0]['효율성']:.0f}부)")
+    
+    with col2:
+        st.markdown("#### ⚠️ 개선 필요 분야")
+        if not market_analysis.empty:
+            weak_subjects = market_analysis[market_analysis['점유율(%)'] < 30].sort_values('주문부수', ascending=False)
+            if len(weak_subjects) > 0:
+                st.warning(f"⚡ **{len(weak_subjects)}개 과목**이 30% 미만 점유율")
+                for idx, row in weak_subjects.head(5).iterrows():
+                    st.write(f"• {row['과목명']}: {row['점유율(%)']:.1f}% (개선 여지)")
+            else:
+                st.success("모든 과목이 30% 이상 점유율을 기록했습니다!")
+        
+        st.markdown("#### 🎯 성장 기회")
+        if '시도교육청' in order_df.columns:
+            region_penetration = order_df.groupby('시도교육청')['정보공시학교코드'].nunique() if '정보공시학교코드' in order_df.columns else order_df.groupby('시도교육청')['학교코드'].nunique()
+            low_penetration = region_penetration.nsmallest(3)
+            st.info(f"📌 진출 확대 지역: {', '.join(low_penetration.index[:3].tolist())}")
 
 st.markdown("---")
 
 # Navigation Guide
 st.header("🧭 페이지 안내")
-st.info("""
-왼쪽 사이드바에서 원하는 분석 페이지를 선택하세요:
-- **📚 교과/과목별 분석**: 과목별 점유율 및 상세 분석
-- **🗺️ 지역별 분석**: 시도/교육청/학교급별 상세 분석
-- **🏢 총판별 분석**: 총판별 판매 현황 및 비교
-- **📖 교과서별 분석**: 개별 교과서 상세 분석 및 도서코드별 추적
-- **🔍 비교 분석**: 다차원 비교 및 크로스 분석
-""")
+st.markdown("""
+<div style='background: linear-gradient(to right, #f8f9fa 0%, #e9ecef 100%); 
+            padding: 20px; border-radius: 10px; border-left: 5px solid #667eea;'>
+<p style='font-size: 1.1em; margin-bottom: 15px;'><b>왼쪽 사이드바에서 원하는 분석 페이지를 선택하세요:</b></p>
+
+📚 <b>교과/과목별 분석</b><br>
+&nbsp;&nbsp;&nbsp;&nbsp;→ 과목별 점유율 및 학교급별 상세 분석, 히트맵 시각화
+
+🗺️ <b>지역별 분석</b><br>
+&nbsp;&nbsp;&nbsp;&nbsp;→ 시도/교육청/시군구별 상세 분석, 지역 트렌드
+
+🏢 <b>총판별 분석</b><br>
+&nbsp;&nbsp;&nbsp;&nbsp;→ 총판별 판매 현황 및 성과 비교, 효율성 분석
+
+📖 <b>교과서별 분석</b><br>
+&nbsp;&nbsp;&nbsp;&nbsp;→ 개별 교과서 상세 분석 및 도서코드별 추적
+
+🔍 <b>비교 분석</b><br>
+&nbsp;&nbsp;&nbsp;&nbsp;→ A/B 비교 및 크로스 분석 (지역, 총판, 과목)
+
+🔄 <b>총판 비교분석</b><br>
+&nbsp;&nbsp;&nbsp;&nbsp;→ 2~6개 총판 동시 비교, 목표달성률, 시장 점유율
+
+🏅 <b>등급별 분석</b><br>
+&nbsp;&nbsp;&nbsp;&nbsp;→ S/A/B/C/D/E/G 등급별 총판 성과 분석
+</div>
+""", unsafe_allow_html=True)
 
 st.markdown("---")
-st.caption("© 2025 CMASS - 22개정 실적 분석 시스템")
+st.caption("© 2025 CMASS - 22개정 실적 분석 시스템 | 📊 Data-Driven Decision Making")

@@ -53,7 +53,7 @@ if '총판' in filtered_order_df.columns:
     st.markdown("---")
     
     # Tab Layout
-    tab1, tab2, tab3, tab4 = st.tabs(["📊 총판별 현황", "📈 실적 비교", "🎯 성과 분석", "📋 상세 테이블"])
+    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 총판별 현황", "📈 실적 비교", "🎯 성과 분석", "💡 효율성 분석", "📋 상세 테이블"])
     
     with tab1:
         st.subheader("총판별 판매 현황")
@@ -334,6 +334,133 @@ if '총판' in filtered_order_df.columns:
                 st.plotly_chart(fig_pie, use_container_width=True)
     
     with tab4:
+        st.subheader("� 총판 효율성 및 성장 분석")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("#### 📊 효율성 지표")
+            
+            # Add efficiency metrics
+            dist_stats['과목당평균부수'] = dist_stats['주문부수'] / dist_stats['취급과목수']
+            dist_stats['과목다양성'] = dist_stats['취급과목수']
+            
+            # Efficiency score
+            dist_stats['효율성점수'] = (
+                (dist_stats['학교당평균'] / dist_stats['학교당평균'].max() * 50) +
+                (dist_stats['과목당평균부수'] / dist_stats['과목당평균부수'].max() * 50)
+            )
+            
+            top_efficient = dist_stats.nlargest(10, '효율성점수')
+            
+            fig = px.bar(
+                top_efficient,
+                x='총판',
+                y='효율성점수',
+                title="효율성 TOP 10 총판",
+                text='효율성점수',
+                color='효율성점수',
+                color_continuous_scale='RdYlGn'
+            )
+            fig.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+            fig.update_layout(xaxis_tickangle=-45, showlegend=False, height=400)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Detailed efficiency table
+            st.markdown("**효율성 상세 지표**")
+            efficiency_display = top_efficient[['총판', '학교당평균', '과목당평균부수', '효율성점수']].copy()
+            st.dataframe(
+                efficiency_display.style.format({
+                    '학교당평균': '{:.1f}',
+                    '과목당평균부수': '{:.1f}',
+                    '효율성점수': '{:.2f}'
+                }),
+                use_container_width=True,
+                height=300
+            )
+        
+        with col2:
+            st.markdown("#### 🎯 성장 잠재력 분석")
+            
+            # Growth potential based on low penetration but high efficiency
+            dist_stats['성장잠재력'] = (
+                (100 - dist_stats['판매비중(%)']) * dist_stats['효율성점수'] / 100
+            )
+            
+            high_potential = dist_stats.nlargest(10, '성장잠재력')
+            
+            fig = px.scatter(
+                high_potential,
+                x='판매비중(%)',
+                y='효율성점수',
+                size='성장잠재력',
+                color='성장잠재력',
+                hover_name='총판',
+                title="성장 잠재력 매트릭스 (크기 = 잠재력)",
+                labels={'판매비중(%)': '현재 시장 점유율 (%)', '효율성점수': '효율성 점수'},
+                color_continuous_scale='Viridis'
+            )
+            fig.add_hline(y=50, line_dash="dash", line_color="red", 
+                         annotation_text="효율성 기준선", annotation_position="right")
+            fig.add_vline(x=5, line_dash="dash", line_color="blue",
+                         annotation_text="점유율 기준선", annotation_position="top")
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Strategic recommendations
+            st.markdown("**🎯 전략적 분류**")
+            
+            # Classify distributors
+            high_eff = dist_stats['효율성점수'].median()
+            high_share = dist_stats['판매비중(%)'].median()
+            
+            stars = dist_stats[(dist_stats['효율성점수'] >= high_eff) & (dist_stats['판매비중(%)'] >= high_share)]
+            rising_stars = dist_stats[(dist_stats['효율성점수'] >= high_eff) & (dist_stats['판매비중(%)'] < high_share)]
+            cash_cows = dist_stats[(dist_stats['효율성점수'] < high_eff) & (dist_stats['판매비중(%)'] >= high_share)]
+            question_marks = dist_stats[(dist_stats['효율성점수'] < high_eff) & (dist_stats['판매비중(%)'] < high_share)]
+            
+            st.success(f"⭐ **Star 총판** ({len(stars)}개): 높은 점유율 + 높은 효율성")
+            if len(stars) > 0:
+                st.write(f"- {', '.join(stars['총판'].head(5).tolist())}")
+            
+            st.info(f"🌟 **Rising Star** ({len(rising_stars)}개): 낮은 점유율 + 높은 효율성 (성장 잠재력)")
+            if len(rising_stars) > 0:
+                st.write(f"- {', '.join(rising_stars['총판'].head(5).tolist())}")
+            
+            st.warning(f"💰 **Cash Cow** ({len(cash_cows)}개): 높은 점유율 + 낮은 효율성 (개선 필요)")
+            if len(cash_cows) > 0:
+                st.write(f"- {', '.join(cash_cows['총판'].head(5).tolist())}")
+            
+            st.error(f"❓ **Question Mark** ({len(question_marks)}개): 낮은 점유율 + 낮은 효율성 (전략 재검토)")
+            if len(question_marks) > 0:
+                st.write(f"- {', '.join(question_marks['총판'].head(3).tolist())}")
+        
+        # Network analysis
+        st.markdown("---")
+        st.markdown("#### 🌐 총판 네트워크 분석")
+        
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            # Coverage concentration
+            coverage_ratio = dist_stats['거래학교수'].sum() / len(dist_stats)
+            st.metric("평균 거래 학교 수", f"{coverage_ratio:.0f}개",
+                     help="총판당 평균 거래 학교 수")
+        
+        with col2:
+            # Subject diversity
+            avg_subjects = dist_stats['취급과목수'].mean()
+            st.metric("평균 취급 과목 수", f"{avg_subjects:.1f}개",
+                     help="총판당 평균 취급 과목 종류")
+        
+        with col3:
+            # Market concentration (HHI)
+            hhi = (dist_stats['판매비중(%)'] ** 2).sum()
+            concentration_level = "높음" if hhi > 2500 else "중간" if hhi > 1500 else "낮음"
+            st.metric("시장 집중도", concentration_level,
+                     delta=f"HHI: {hhi:.0f}",
+                     help="HHI (Herfindahl-Hirschman Index): 시장 집중도 지표")
+    
+    with tab5:
         st.subheader("📋 총판별 상세 데이터")
         
         # Search
@@ -353,7 +480,10 @@ if '총판' in filtered_order_df.columns:
                 '취급과목수': '{:,.0f}',
                 '판매비중(%)': '{:.2f}%',
                 '학교당평균': '{:.2f}',
-                '종합점수': '{:.2f}'
+                '종합점수': '{:.2f}',
+                '과목당평균부수': '{:.1f}',
+                '효율성점수': '{:.2f}',
+                '성장잠재력': '{:.2f}'
             }),
             use_container_width=True,
             height=400
