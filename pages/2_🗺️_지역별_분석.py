@@ -149,21 +149,71 @@ with tab1:
             fig_funnel.update_layout(title="지역별 주문량 TOP 10 (Funnel)")
             st.plotly_chart(fig_funnel, use_container_width=True)
         
-        # Regional performance cards
+        # Regional performance cards with school level breakdown
         st.markdown("---")
         st.subheader("🏆 지역별 성과 카드")
+        st.caption("카드를 클릭하면 학교급별 학생수와 세부 주문 내역을 확인할 수 있습니다.")
+        
+        # Calculate school level breakdown by region
+        school_level_names = {2: '초등학교', 3: '중학교', 4: '고등학교'}
+        if '학교급코드' in filtered_total_df.columns:
+            region_school_breakdown = filtered_total_df.groupby(['시도교육청', '학교급코드'])['학생수(계)'].sum().reset_index()
+            region_school_breakdown['학교급'] = region_school_breakdown['학교급코드'].map(school_level_names)
         
         cols = st.columns(3)
         for idx, (_, row) in enumerate(region_stats.head(6).iterrows()):
             with cols[idx % 3]:
+                region_name = row['시도교육청']
+                
+                # Card button
+                if st.button(f"📍 {region_name}", key=f"region_card_{idx}"):
+                    st.session_state[f'show_detail_{region_name}'] = not st.session_state.get(f'show_detail_{region_name}', False)
+                
                 st.markdown(f"""
                 <div style="border: 2px solid #4CAF50; border-radius: 10px; padding: 15px; margin: 10px 0;">
-                    <h4>{row['시도교육청']}</h4>
+                    <h4>{region_name}</h4>
                     <p><b>점유율:</b> {row['점유율(%)']:.2f}%</p>
                     <p><b>주문:</b> {row['주문부수']:,.0f}부</p>
                     <p><b>전체학생:</b> {row['전체학생수']:,.0f}명</p>
                 </div>
                 """, unsafe_allow_html=True)
+                
+                # Show detail when clicked
+                if st.session_state.get(f'show_detail_{region_name}', False):
+                    with st.expander(f"📊 {region_name} 상세 정보", expanded=True):
+                        # School level breakdown
+                        if '학교급코드' in filtered_total_df.columns:
+                            st.markdown("**📚 학교급별 전체 학생수**")
+                            region_breakdown = region_school_breakdown[region_school_breakdown['시도교육청'] == region_name]
+                            for _, level_row in region_breakdown.iterrows():
+                                st.write(f"- {level_row['학교급']}: {level_row['학생수(계)']:,.0f}명")
+                        
+                        st.markdown("---")
+                        
+                        # Order details
+                        st.markdown("**📦 세부 주문 내역**")
+                        region_orders = filtered_order_df[filtered_order_df['시도교육청'] == region_name]
+                        
+                        if len(region_orders) > 0:
+                            # Aggregate by subject
+                            subject_summary = region_orders.groupby('과목명')['부수'].sum().reset_index()
+                            subject_summary = subject_summary.sort_values('부수', ascending=False)
+                            
+                            st.dataframe(
+                                subject_summary.style.format({'부수': '{:,.0f}'}),
+                                use_container_width=True,
+                                height=200
+                            )
+                            
+                            # Distributor breakdown
+                            if '총판' in region_orders.columns:
+                                st.markdown("**🏢 총판별 주문**")
+                                dist_summary = region_orders.groupby('총판')['부수'].sum().reset_index()
+                                dist_summary = dist_summary.sort_values('부수', ascending=False).head(5)
+                                for _, dist_row in dist_summary.iterrows():
+                                    st.write(f"- {dist_row['총판']}: {dist_row['부수']:,.0f}부")
+                        else:
+                            st.info("주문 내역이 없습니다.")
 
 with tab2:
     st.subheader("교육지원청별 상세 분석")

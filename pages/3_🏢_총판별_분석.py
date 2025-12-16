@@ -228,23 +228,86 @@ if '총판' in filtered_order_df.columns:
         dist_stats = dist_stats.sort_values('종합점수', ascending=False)
         
         # Display top performers
+        # Display top performers with school level breakdown
+        st.markdown("👉 카드를 클릭하면 해당 총판의 세부 주문 내역과 지역별 학교급별 현황을 확인할 수 있습니다.")
+        
         cols = st.columns(3)
         for idx, row in dist_stats.head(9).iterrows():
             col_idx = dist_stats.head(9).index.tolist().index(idx)
             with cols[col_idx % 3]:
                 rank = col_idx + 1
                 medal = "🥇" if rank == 1 else "🥈" if rank == 2 else "🥉" if rank == 3 else f"#{rank}"
+                dist_name = row['총판']
+                
+                # Card button
+                if st.button(f"{medal} {dist_name}", key=f"dist_card_{idx}"):
+                    st.session_state[f'show_dist_detail_{dist_name}'] = not st.session_state.get(f'show_dist_detail_{dist_name}', False)
                 
                 st.markdown(f"""
                 <div style="border: 2px solid {'#FFD700' if rank == 1 else '#C0C0C0' if rank == 2 else '#CD7F32' if rank == 3 else '#4CAF50'}; 
                             border-radius: 10px; padding: 15px; margin: 10px 0;">
-                    <h4>{medal} {row['총판']}</h4>
+                    <h4>{medal} {dist_name}</h4>
                     <p><b>종합점수:</b> {row['종합점수']:.1f}</p>
                     <p><b>주문:</b> {row['주문부수']:,.0f}부 ({row['판매비중(%)']:.1f}%)</p>
                     <p><b>거래학교:</b> {row['거래학교수']}개교</p>
                     <p><b>평균/학교:</b> {row['학교당평균']:.1f}부</p>
                 </div>
                 """, unsafe_allow_html=True)
+                
+                # Show detail when clicked
+                if st.session_state.get(f'show_dist_detail_{dist_name}', False):
+                    with st.expander(f"📊 {dist_name} 상세 정보", expanded=True):
+                        dist_orders = filtered_order_df[filtered_order_df['총판'] == dist_name]
+                        
+                        # Subject breakdown
+                        st.markdown("**📚 과목별 주문**")
+                        subject_summary = dist_orders.groupby('과목명')['부수'].sum().reset_index()
+                        subject_summary = subject_summary.sort_values('부수', ascending=False)
+                        st.dataframe(
+                            subject_summary.style.format({'부수': '{:,.0f}'}),
+                            use_container_width=True,
+                            height=150
+                        )
+                        
+                        st.markdown("---")
+                        
+                        # Regional breakdown with school level
+                        if '시도교육청' in dist_orders.columns:
+                            st.markdown("**🗺️ 지역별 주문 현황**")
+                            
+                            # Get school codes from orders and merge with total data
+                            if '정보공시학교코드' in dist_orders.columns:
+                                # Merge to get school level info
+                                dist_with_level = pd.merge(
+                                    dist_orders,
+                                    total_df[['정보공시 학교코드', '학교급코드', '학생수(계)']].drop_duplicates(),
+                                    left_on='정보공시학교코드',
+                                    right_on='정보공시 학교코드',
+                                    how='left'
+                                )
+                                
+                                school_level_names = {2: '초등학교', 3: '중학교', 4: '고등학교'}
+                                dist_with_level['학교급'] = dist_with_level['학교급코드'].map(school_level_names)
+                                
+                                # Group by region and school level
+                                region_school_summary = dist_with_level.groupby(['시도교육청', '학교급']).agg({
+                                    '부수': 'sum',
+                                    '학생수(계)': 'sum'
+                                }).reset_index()
+                                
+                                # Display by region
+                                for region in region_school_summary['시도교육청'].unique():
+                                    region_data = region_school_summary[region_school_summary['시도교육청'] == region]
+                                    st.write(f"**{region}**")
+                                    for _, level_row in region_data.iterrows():
+                                        if pd.notna(level_row['학교급']):
+                                            st.write(f"  - {level_row['학교급']}: 주문 {level_row['부수']:,.0f}부 / 전체학생 {level_row['학생수(계)']:,.0f}명")
+                            else:
+                                # Simple regional breakdown
+                                region_summary = dist_orders.groupby('시도교육청')['부수'].sum().reset_index()
+                                region_summary = region_summary.sort_values('부수', ascending=False)
+                                for _, reg_row in region_summary.iterrows():
+                                    st.write(f"- {reg_row['시도교육청']}: {reg_row['부수']:,.0f}부")
         
         # Regional distribution by distributor
         st.markdown("---")
