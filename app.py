@@ -228,6 +228,34 @@ st.title("📊 22개정 자사 실적표 조회 시스템")
 st.markdown("### 💼 Executive Dashboard")
 st.markdown("---")
 
+# 학년도 필터 (사이드바)
+st.sidebar.header("📅 학년도 선택")
+if '학년도' in order_df.columns:
+    years = sorted(order_df['학년도'].dropna().unique().tolist(), reverse=True)
+    # 2026년도가 있으면 기본값으로, 없으면 최신 학년도
+    default_year = 2026 if 2026 in years else (years[0] if years else None)
+    default_index = years.index(default_year) if default_year and default_year in years else 0
+    
+    selected_year = st.sidebar.selectbox(
+        "기준 학년도", 
+        years, 
+        index=default_index,
+        key='main_year_filter'
+    )
+    
+    # 선택된 학년도 데이터 필터링
+    filtered_order = order_df[order_df['학년도'] == selected_year].copy()
+    
+    # 학년도별 비교 옵션
+    if len(years) > 1:
+        show_year_comparison = st.sidebar.checkbox("📊 학년도별 비교 보기", key='main_year_comparison')
+else:
+    filtered_order = order_df.copy()
+    selected_year = None
+    show_year_comparison = False
+
+st.sidebar.markdown("---")
+
 # Key Performance Indicators - Enhanced
 col1, col2, col3, col4, col5 = st.columns(5)
 
@@ -237,16 +265,22 @@ with col1:
              help="전국 중·고등학교 전체 학생수")
 
 with col2:
-    total_orders = order_df['부수'].sum()
-    total_revenue = order_df['금액'].sum() if '금액' in order_df.columns else 0
-    st.metric("2026년용 주문 부수", f"{total_orders:,.0f}부",
+    total_orders = filtered_order['부수'].sum()
+    total_revenue = filtered_order['금액'].sum() if '금액' in filtered_order.columns else 0
+    year_label = f"{selected_year}년용" if selected_year else "전체"
+    st.metric(f"{year_label} 주문 부수", f"{total_orders:,.0f}부",
              delta=f"₩{total_revenue/100000000:.1f}억원",
              help="총 주문 부수 및 매출액")
 
 with col3:
     # Calculate accurate overall share from market_analysis
     if not market_analysis.empty:
-        total_market = market_analysis['시장규모(학생수)'].sum()
+        # 선택된 학년도의 시장 규모 계산
+        year_market_analysis = market_analysis.copy()
+        if selected_year:
+            # 학년도에 따라 시장 규모 재계산 필요 시 처리
+            pass
+        total_market = year_market_analysis['시장규모(학생수)'].sum()
         accurate_share = (total_orders / total_market * 100) if total_market > 0 else 0
         st.metric("정확 점유율", f"{accurate_share:.2f}%", 
                  help="각 과목의 대상 학년별 시장 규모를 기준으로 계산")
@@ -259,8 +293,8 @@ with col4:
     preferred_cols = ['정보공시학교코드', '정보공시 학교코드', '학교코드']
     total_schools = 0
     for col in preferred_cols:
-        if col in order_df.columns:
-            total_schools = order_df[col].dropna().nunique()
+        if col in filtered_order.columns:
+            total_schools = filtered_order[col].dropna().nunique()
             break
     penetration_rate = (total_schools / total_df['학교명'].nunique() * 100) if not total_df.empty else 0
     st.metric("주문 학교 수", f"{total_schools:,}개교",
@@ -274,6 +308,71 @@ with col5:
              help="주문 학교당 평균 주문 부수")
 
 st.markdown("---")
+
+# 학년도별 비교 섹션
+if show_year_comparison and len(years) > 1:
+    st.header(f"📊 학년도별 성과 비교")
+    
+    # 모든 학년도 데이터 비교
+    comparison_data = []
+    for year in years:
+        year_data = order_df[order_df['학년도'] == year]
+        
+        # 학교 수 계산
+        year_schools = 0
+        for col in preferred_cols:
+            if col in year_data.columns:
+                year_schools = year_data[col].dropna().nunique()
+                break
+        
+        comparison_data.append({
+            '학년도': f"{year}년",
+            '주문부수': year_data['부수'].sum(),
+            '주문금액': year_data['금액'].sum() if '금액' in year_data.columns else 0,
+            '주문학교수': year_schools,
+            '학교당평균': year_data['부수'].sum() / year_schools if year_schools > 0 else 0
+        })
+    
+    comparison_df = pd.DataFrame(comparison_data)
+    
+    # 비교 차트
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        import plotly.express as px
+        fig1 = px.bar(
+            comparison_df,
+            x='학년도',
+            y='주문부수',
+            title="학년도별 주문 부수 비교",
+            text='주문부수'
+        )
+        fig1.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+        st.plotly_chart(fig1, use_container_width=True)
+    
+    with col2:
+        fig2 = px.bar(
+            comparison_df,
+            x='학년도',
+            y='주문학교수',
+            title="학년도별 주문 학교 수 비교",
+            text='주문학교수'
+        )
+        fig2.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+        st.plotly_chart(fig2, use_container_width=True)
+    
+    # 상세 테이블
+    st.dataframe(
+        comparison_df.style.format({
+            '주문부수': '{:,.0f}',
+            '주문금액': '{:,.0f}',
+            '주문학교수': '{:,.0f}',
+            '학교당평균': '{:,.1f}'
+        }),
+        use_container_width=True
+    )
+    
+    st.markdown("---")
 
 # Performance Dashboard Cards
 st.header("🎯 핵심 성과 지표 (KPI)")
@@ -289,10 +388,10 @@ with col1:
         </p>
         <p style='margin:0; opacity: 0.9;'>취급 과목 종류</p>
     </div>
-    """.format(subjects=order_df['과목명'].nunique()), unsafe_allow_html=True)
+    """.format(subjects=filtered_order['과목명'].nunique()), unsafe_allow_html=True)
 
 with col2:
-    num_distributors = order_df['총판'].nunique() if '총판' in order_df.columns else 0
+    num_distributors = filtered_order['총판'].nunique() if '총판' in filtered_order.columns else 0
     st.markdown("""
     <div style='background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); 
                 padding: 20px; border-radius: 10px; color: white;'>
@@ -305,7 +404,7 @@ with col2:
     """.format(dist=num_distributors), unsafe_allow_html=True)
 
 with col3:
-    num_regions = order_df['시도교육청'].nunique() if '시도교육청' in order_df.columns else 0
+    num_regions = filtered_order['시도교육청'].nunique() if '시도교육청' in filtered_order.columns else 0
     st.markdown("""
     <div style='background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); 
                 padding: 20px; border-radius: 10px; color: white;'>
@@ -320,8 +419,12 @@ with col3:
 st.markdown("---")
 
 # Display market analysis insights
-st.header("📊 시장 규모 분석 (2026년도 기준)")
-st.caption("💡 2025년 주문한 교과서는 2026년에 사용합니다. 현재 1학년 → 내년 2학년을 기준으로 정확한 시장 규모를 산정했습니다.")
+year_text = f"{selected_year}년도" if selected_year else "전체"
+st.header(f"📊 시장 규모 분석 ({year_text} 기준)")
+if selected_year == 2025:
+    st.caption("💡 2025년도 주문한 교과서는 2025년에 사용합니다.")
+else:
+    st.caption("💡 2025년 주문한 교과서는 2026년에 사용합니다. 현재 1학년 → 내년 2학년을 기준으로 정확한 시장 규모를 산정했습니다.")
 st.info("⚠️ 과목명의 숫자(1, 2)는 학기를 의미합니다. 예: 한국사 1 = 1학기, 한국사 2 = 2학기 (학년 아님)")
 
 if not market_analysis.empty:
