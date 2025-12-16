@@ -96,20 +96,21 @@ def load_data():
     if '정보공시학교코드' in order_df.columns:
         order_df['정보공시학교코드'] = order_df['정보공시학교코드'].astype(str)
     
-    # Merge product info to add school level to subject names
-    if not product_df.empty and '코드' in product_df.columns and '학교급' in product_df.columns:
+    # Merge product info to add school level to subject names (only if order data has product 코드)
+    if (not product_df.empty and '코드' in product_df.columns and '학교급' in product_df.columns
+            and '코드' in order_df.columns):
         # Create mapping from product code to school level
         product_df['코드'] = product_df['코드'].astype(str)
         order_df['코드'] = order_df['코드'].astype(str)
-        
+
         # Merge to get school level
         order_df = pd.merge(
-            order_df, 
+            order_df,
             product_df[['코드', '학교급', '교과군']].rename(columns={'교과군': '교과군_제품'}),
             on='코드',
             how='left'
         )
-        
+
         # Add school level to subject name for clarity (중등 정보 vs 고등 정보)
         def add_school_level_to_subject(row):
             if pd.notna(row.get('학교급')) and pd.notna(row.get('교과서명')):
@@ -121,9 +122,10 @@ def load_data():
                 elif school_level == '고등학교':
                     return f"[고등] {subject}"
             return row.get('교과서명', '')
-        
+
         order_df['교과서명_구분'] = order_df.apply(add_school_level_to_subject, axis=1)
     else:
+        # If product code missing in order data, fall back to original subject name
         order_df['교과서명_구분'] = order_df.get('교과서명', '')
     
     # Map official distributor names (총판명(공식))
