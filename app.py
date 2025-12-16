@@ -104,14 +104,19 @@ def load_data():
         product_df['코드'] = product_df['코드'].astype(str)
         order_df['도서코드(교지명구분)'] = order_df['도서코드(교지명구분)'].astype(str)
 
-        # Merge to get school level and target subject info (목표과목1/목표과목2)
-        merge_cols = ['코드', '학교급', '교과군']
+        # Merge to get school level, subject name and target subject info (목표과목)
+        # Include '교과서명' so we can build 교과서명_구분 = [중등]/[고등] + 교과서명
+        merge_cols = ['코드', '학교급', '교과군', '교과서명']
         if '2026 목표과목' in product_df.columns:
             merge_cols.append('2026 목표과목')
-        
+
+        product_merge = product_df[merge_cols].rename(columns={'교과군': '교과군_제품'})
+        product_merge['코드'] = product_merge['코드'].astype(str)
+        order_df['도서코드(교지명구분)'] = order_df['도서코드(교지명구분)'].astype(str)
+
         order_df = pd.merge(
             order_df,
-            product_df[merge_cols].rename(columns={'교과군': '교과군_제품'}),
+            product_merge,
             left_on='도서코드(교지명구분)',
             right_on='코드',
             how='left'
