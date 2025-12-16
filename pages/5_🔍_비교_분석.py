@@ -21,7 +21,7 @@ st.markdown("---")
 tab1, tab2, tab3, tab4 = st.tabs(["🆚 A/B 비교", "📊 크로스 분석", "🎯 벤치마크", "📈 트렌드 분석"])
 
 with tab1:
-    st.subheader("🆚 A/B 비교 분석")
+    st.subheader("🆚 A/B 비교 분석 (점유율 기준)")
     
     col1, col2 = st.columns(2)
     
@@ -43,25 +43,90 @@ with tab1:
         data_a = order_df[order_df['시도교육청'] == region_a]
         data_b = order_df[order_df['시도교육청'] == region_b]
         
-        col1, col2, col3 = st.columns(3)
+        # Calculate market size for each region
+        school_code_col = '정보공시학교코드' if '정보공시학교코드' in data_a.columns else '학교코드'
+        schools_a_codes = data_a[school_code_col].unique() if school_code_col in data_a.columns else []
+        schools_b_codes = data_b[school_code_col].unique() if school_code_col in data_b.columns else []
         
-        with col1:
-            orders_a = data_a['부수'].sum()
-            orders_b = data_b['부수'].sum()
-            st.metric(f"{region_a} 주문량", f"{orders_a:,.0f}부", delta=f"{orders_a - orders_b:+,.0f}부")
-            st.metric(f"{region_b} 주문량", f"{orders_b:,.0f}부")
+        # Calculate market size (중등/고등 1,2학년 학생수)
+        if not total_df.empty:
+            schools_a_df = total_df[total_df['정보공시 학교코드'].isin(schools_a_codes.astype(str))]
+            market_a = 0
+            for _, school in schools_a_df.iterrows():
+                grade_code = school.get('학교급코드', 0)
+                if grade_code == 3:  # 중학교
+                    market_a += school.get('1학년 학생수', 0) + school.get('2학년 학생수', 0)
+                elif grade_code == 4:  # 고등학교
+                    market_a += school.get('1학년 학생수', 0) + school.get('2학년 학생수', 0)
+            
+            schools_b_df = total_df[total_df['정보공시 학교코드'].isin(schools_b_codes.astype(str))]
+            market_b = 0
+            for _, school in schools_b_df.iterrows():
+                grade_code = school.get('학교급코드', 0)
+                if grade_code == 3:  # 중학교
+                    market_b += school.get('1학년 학생수', 0) + school.get('2학년 학생수', 0)
+                elif grade_code == 4:  # 고등학교
+                    market_b += school.get('1학년 학생수', 0) + school.get('2학년 학생수', 0)
+        else:
+            market_a = market_b = 0
         
-        with col2:
-            schools_a = data_a['학교코드'].nunique() if '학교코드' in data_a.columns else len(data_a)
-            schools_b = data_b['학교코드'].nunique() if '학교코드' in data_b.columns else len(data_b)
-            st.metric(f"{region_a} 학교 수", f"{schools_a}개교", delta=f"{schools_a - schools_b:+}개교")
-            st.metric(f"{region_b} 학교 수", f"{schools_b}개교")
+        orders_a = data_a['부수'].sum()
+        orders_b = data_b['부수'].sum()
+        share_a = (orders_a / market_a * 100) if market_a > 0 else 0
+        share_b = (orders_b / market_b * 100) if market_b > 0 else 0
         
-        with col3:
-            avg_a = orders_a / schools_a if schools_a > 0 else 0
-            avg_b = orders_b / schools_b if schools_b > 0 else 0
-            st.metric(f"{region_a} 학교당 평균", f"{avg_a:.1f}부", delta=f"{avg_a - avg_b:+.1f}부")
-            st.metric(f"{region_b} 학교당 평균", f"{avg_b:.1f}부")
+        # Summary cards with visual comparison
+        st.markdown("### 📊 종합 비교")
+        cols = st.columns(2)
+        
+        with cols[0]:
+            color_a = '#4CAF50' if share_a >= share_b else '#FF9800'
+            st.markdown(f"""
+            <div style="border: 3px solid {color_a}; border-radius: 15px; padding: 25px; background: linear-gradient(135deg, {color_a}22 0%, {color_a}11 100%);">
+                <h2 style="margin:0; color:{color_a};">📍 {region_a}</h2>
+                <hr style="border-color:{color_a};">
+                <h1 style="margin:10px 0; color:{color_a}; font-size:3em;">{share_a:.2f}%</h1>
+                <p style="font-size:1.2em; margin:5px 0;"><b>시장 점유율</b></p>
+                <p style="margin:5px 0;">주문량: {orders_a:,.0f}부</p>
+                <p style="margin:5px 0;">시장규모: {market_a:,.0f}명</p>
+                <p style="margin:5px 0;">학교수: {len(schools_a_codes)}개교</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        with cols[1]:
+            color_b = '#4CAF50' if share_b >= share_a else '#FF9800'
+            st.markdown(f"""
+            <div style="border: 3px solid {color_b}; border-radius: 15px; padding: 25px; background: linear-gradient(135deg, {color_b}22 0%, {color_b}11 100%);">
+                <h2 style="margin:0; color:{color_b};">📍 {region_b}</h2>
+                <hr style="border-color:{color_b};">
+                <h1 style="margin:10px 0; color:{color_b}; font-size:3em;">{share_b:.2f}%</h1>
+                <p style="font-size:1.2em; margin:5px 0;"><b>시장 점유율</b></p>
+                <p style="margin:5px 0;">주문량: {orders_b:,.0f}부</p>
+                <p style="margin:5px 0;">시장규모: {market_b:,.0f}명</p>
+                <p style="margin:5px 0;">학교수: {len(schools_b_codes)}개교</p>
+            </div>
+            """, unsafe_allow_html=True)
+        
+        # Comparison chart - Market Share
+        st.markdown("---")
+        st.markdown("### 📈 점유율 비교")
+        
+        fig_share = go.Figure()
+        fig_share.add_trace(go.Bar(
+            name='점유율 (%)',
+            x=[region_a, region_b],
+            y=[share_a, share_b],
+            text=[f'{share_a:.2f}%', f'{share_b:.2f}%'],
+            textposition='outside',
+            marker_color=['#4CAF50' if share_a >= share_b else '#FF9800', '#4CAF50' if share_b >= share_a else '#FF9800']
+        ))
+        fig_share.update_layout(
+            title="지역별 시장 점유율 비교",
+            yaxis_title="점유율 (%)",
+            height=400,
+            showlegend=False
+        )
+        st.plotly_chart(fig_share, use_container_width=True)
         
         # Subject comparison
         st.markdown("---")
@@ -95,51 +160,144 @@ with tab1:
         data_a = order_df[order_df['총판'] == dist_a]
         data_b = order_df[order_df['총판'] == dist_b]
         
+        # Calculate market size for each distributor
+        school_code_col = '정보공시학교코드' if '정보공시학교코드' in data_a.columns else '학교코드'
+        schools_a_codes = data_a[school_code_col].unique() if school_code_col in data_a.columns else []
+        schools_b_codes = data_b[school_code_col].unique() if school_code_col in data_b.columns else []
+        
+        # Calculate market size
+        if not total_df.empty:
+            schools_a_df = total_df[total_df['정보공시 학교코드'].isin(schools_a_codes.astype(str))]
+            market_a = 0
+            for _, school in schools_a_df.iterrows():
+                grade_code = school.get('학교급코드', 0)
+                if grade_code == 3:  # 중학교
+                    market_a += school.get('1학년 학생수', 0) + school.get('2학년 학생수', 0)
+                elif grade_code == 4:  # 고등학교
+                    market_a += school.get('1학년 학생수', 0) + school.get('2학년 학생수', 0)
+            
+            schools_b_df = total_df[total_df['정보공시 학교코드'].isin(schools_b_codes.astype(str))]
+            market_b = 0
+            for _, school in schools_b_df.iterrows():
+                grade_code = school.get('학교급코드', 0)
+                if grade_code == 3:  # 중학교
+                    market_b += school.get('1학년 학생수', 0) + school.get('2학년 학생수', 0)
+                elif grade_code == 4:  # 고등학교
+                    market_b += school.get('1학년 학생수', 0) + school.get('2학년 학생수', 0)
+        else:
+            market_a = market_b = 0
+        
         # Metrics comparison
-        metrics = {
-            '주문부수': data_a['부수'].sum(),
-            '주문금액': data_a['금액'].sum() if '금액' in data_a.columns else 0,
-            '거래학교': data_a['학교코드'].nunique() if '학교코드' in data_a.columns else len(data_a),
-            '취급과목': data_a['과목명'].nunique() if '과목명' in data_a.columns else 0
-        }
+        orders_a = data_a['부수'].sum()
+        orders_b = data_b['부수'].sum()
+        share_a = (orders_a / market_a * 100) if market_a > 0 else 0
+        share_b = (orders_b / market_b * 100) if market_b > 0 else 0
         
-        metrics_b = {
-            '주문부수': data_b['부수'].sum(),
-            '주문금액': data_b['금액'].sum() if '금액' in data_b.columns else 0,
-            '거래학교': data_b['학교코드'].nunique() if '학교코드' in data_b.columns else len(data_b),
-            '취급과목': data_b['과목명'].nunique() if '과목명' in data_b.columns else 0
-        }
+        amount_a = data_a['금액'].sum() if '금액' in data_a.columns else 0
+        amount_b = data_b['금액'].sum() if '금액' in data_b.columns else 0
         
-        # Radar comparison
-        categories = list(metrics.keys())
+        # Summary cards
+        st.markdown("### 📊 종합 비교")
+        cols = st.columns(2)
         
-        fig = go.Figure()
+        with cols[0]:
+            color_a = '#4CAF50' if share_a >= share_b else '#FF9800'
+            st.markdown(f"""
+            <div style="border: 3px solid {color_a}; border-radius: 15px; padding: 25px; background: linear-gradient(135deg, {color_a}22 0%, {color_a}11 100%);">
+                <h2 style="margin:0; color:{color_a};">🏢 {dist_a}</h2>
+                <hr style="border-color:{color_a};">
+                <h1 style="margin:10px 0; color:{color_a}; font-size:3em;">{share_a:.2f}%</h1>
+                <p style="font-size:1.2em; margin:5px 0;"><b>시장 점유율</b></p>
+                <p style="margin:5px 0;">주문량: {orders_a:,.0f}부</p>
+                <p style="margin:5px 0;">주문금액: {amount_a:,.0f}원</p>
+                <p style="margin:5px 0;">시장규모: {market_a:,.0f}명</p>
+                <p style="margin:5px 0;">학교수: {len(schools_a_codes)}개교</p>
+            </div>
+            """, unsafe_allow_html=True)
         
-        # Normalize for radar
-        max_vals = [max(metrics[k], metrics_b[k]) for k in categories]
-        normalized_a = [metrics[k]/max_vals[i]*100 if max_vals[i] > 0 else 0 for i, k in enumerate(categories)]
-        normalized_b = [metrics_b[k]/max_vals[i]*100 if max_vals[i] > 0 else 0 for i, k in enumerate(categories)]
+        with cols[1]:
+            color_b = '#4CAF50' if share_b >= share_a else '#FF9800'
+            st.markdown(f"""
+            <div style="border: 3px solid {color_b}; border-radius: 15px; padding: 25px; background: linear-gradient(135deg, {color_b}22 0%, {color_b}11 100%);">
+                <h2 style="margin:0; color:{color_b};">🏢 {dist_b}</h2>
+                <hr style="border-color:{color_b};">
+                <h1 style="margin:10px 0; color:{color_b}; font-size:3em;">{share_b:.2f}%</h1>
+                <p style="font-size:1.2em; margin:5px 0;"><b>시장 점유율</b></p>
+                <p style="margin:5px 0;">주문량: {orders_b:,.0f}부</p>
+                <p style="margin:5px 0;">주문금액: {amount_b:,.0f}원</p>
+                <p style="margin:5px 0;">시장규모: {market_b:,.0f}명</p>
+                <p style="margin:5px 0;">학교수: {len(schools_b_codes)}개교</p>
+            </div>
+            """, unsafe_allow_html=True)
         
-        fig.add_trace(go.Scatterpolar(
-            r=normalized_a + [normalized_a[0]],
-            theta=categories + [categories[0]],
-            fill='toself',
-            name=dist_a
-        ))
+        # Comparison visualization
+        st.markdown("---")
+        st.markdown("### 📈 종합 비교 차트")
         
-        fig.add_trace(go.Scatterpolar(
-            r=normalized_b + [normalized_b[0]],
-            theta=categories + [categories[0]],
-            fill='toself',
-            name=dist_b
-        ))
+        col1, col2 = st.columns(2)
         
-        fig.update_layout(
-            polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
-            title=f"{dist_a} vs {dist_b} 종합 비교",
-            height=500
-        )
-        st.plotly_chart(fig, use_container_width=True)
+        with col1:
+            # Market share comparison
+            fig_share = go.Figure()
+            fig_share.add_trace(go.Bar(
+                name='점유율 (%)',
+                x=[dist_a, dist_b],
+                y=[share_a, share_b],
+                text=[f'{share_a:.2f}%', f'{share_b:.2f}%'],
+                textposition='outside',
+                marker_color=['#4CAF50' if share_a >= share_b else '#FF9800', '#4CAF50' if share_b >= share_a else '#FF9800']
+            ))
+            fig_share.update_layout(
+                title="시장 점유율 비교",
+                yaxis_title="점유율 (%)",
+                height=400,
+                showlegend=False
+            )
+            st.plotly_chart(fig_share, use_container_width=True)
+        
+        with col2:
+            # Radar chart for normalized comparison
+            categories = ['점유율', '주문량', '주문금액', '학교수']
+            
+            # Normalize values
+            max_share = max(share_a, share_b) if max(share_a, share_b) > 0 else 1
+            max_orders = max(orders_a, orders_b) if max(orders_a, orders_b) > 0 else 1
+            max_amount = max(amount_a, amount_b) if max(amount_a, amount_b) > 0 else 1
+            max_schools = max(len(schools_a_codes), len(schools_b_codes)) if max(len(schools_a_codes), len(schools_b_codes)) > 0 else 1
+            
+            normalized_a = [
+                share_a / max_share * 100,
+                orders_a / max_orders * 100,
+                amount_a / max_amount * 100,
+                len(schools_a_codes) / max_schools * 100
+            ]
+            
+            normalized_b = [
+                share_b / max_share * 100,
+                orders_b / max_orders * 100,
+                amount_b / max_amount * 100,
+                len(schools_b_codes) / max_schools * 100
+            ]
+            
+            fig_radar = go.Figure()
+            fig_radar.add_trace(go.Scatterpolar(
+                r=normalized_a + [normalized_a[0]],
+                theta=categories + [categories[0]],
+                fill='toself',
+                name=dist_a
+            ))
+            fig_radar.add_trace(go.Scatterpolar(
+                r=normalized_b + [normalized_b[0]],
+                theta=categories + [categories[0]],
+                fill='toself',
+                name=dist_b
+            ))
+            fig_radar.update_layout(
+                polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
+                title="다차원 비교 (정규화)",
+                height=400
+            )
+            st.plotly_chart(fig_radar, use_container_width=True)
 
 with tab2:
     st.subheader("📊 크로스 분석 (교차 분석)")
