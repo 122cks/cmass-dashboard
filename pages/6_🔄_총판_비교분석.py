@@ -108,7 +108,7 @@ with tab1:
         else:
             stats['등급'] = '-'
         
-        # Get target from target_df
+        # Get target from target_df and calculate achievement by target subject
         if not target_df.empty and '총판명' in target_df.columns:
             # Try matching with official name
             target_info = target_df[target_df['총판명'] == dist]
@@ -116,8 +116,37 @@ with tab1:
                 # Try partial match
                 dist_name = dist.split(')')[-1] if ')' in dist else dist
                 target_info = target_df[target_df['총판명'].str.contains(dist_name, na=False)]
+            
             if not target_info.empty:
-                target_str = str(target_info.iloc[0].get('전체목표 부수', '0'))
+                target_row = target_info.iloc[0]
+                
+                # Calculate actual orders by target subject (목표과목1, 목표과목2)
+                if '2026 목표과목' in dist_data.columns:
+                    # 목표과목1 달성률
+                    subject1_orders = dist_data[dist_data['2026 목표과목'] == '목표과목1']['부수'].sum()
+                    target1_str = str(target_row.get('목표과목1 부수', '0'))
+                    target1 = pd.to_numeric(target1_str.replace(',', '').strip(), errors='coerce')
+                    stats['목표과목1_주문'] = subject1_orders
+                    stats['목표과목1_목표'] = target1 if pd.notna(target1) else 0
+                    stats['목표과목1_달성률'] = (subject1_orders / target1 * 100) if target1 and target1 > 0 else 0
+                    
+                    # 목표과목2 달성률
+                    subject2_orders = dist_data[dist_data['2026 목표과목'] == '목표과목2']['부수'].sum()
+                    target2_str = str(target_row.get('목표과목2 부수', '0'))
+                    target2 = pd.to_numeric(target2_str.replace(',', '').strip(), errors='coerce')
+                    stats['목표과목2_주문'] = subject2_orders
+                    stats['목표과목2_목표'] = target2 if pd.notna(target2) else 0
+                    stats['목표과목2_달성률'] = (subject2_orders / target2 * 100) if target2 and target2 > 0 else 0
+                else:
+                    stats['목표과목1_주문'] = 0
+                    stats['목표과목1_목표'] = 0
+                    stats['목표과목1_달성률'] = 0
+                    stats['목표과목2_주문'] = 0
+                    stats['목표과목2_목표'] = 0
+                    stats['목표과목2_달성률'] = 0
+                
+                # 전체 목표달성률
+                target_str = str(target_row.get('전체목표 부수', '0'))
                 stats['목표부수'] = pd.to_numeric(target_str.replace(',', '').strip(), errors='coerce')
                 if pd.notna(stats['목표부수']) and stats['목표부수'] > 0:
                     stats['목표달성률'] = (stats['주문부수'] / stats['목표부수']) * 100
@@ -126,9 +155,21 @@ with tab1:
             else:
                 stats['목표부수'] = 0
                 stats['목표달성률'] = 0
+                stats['목표과목1_주문'] = 0
+                stats['목표과목1_목표'] = 0
+                stats['목표과목1_달성률'] = 0
+                stats['목표과목2_주문'] = 0
+                stats['목표과목2_목표'] = 0
+                stats['목표과목2_달성률'] = 0
         else:
             stats['목표부수'] = 0
             stats['목표달성률'] = 0
+            stats['목표과목1_주문'] = 0
+            stats['목표과목1_목표'] = 0
+            stats['목표과목1_달성률'] = 0
+            stats['목표과목2_주문'] = 0
+            stats['목표과목2_목표'] = 0
+            stats['목표과목2_달성률'] = 0
         
         comparison_stats.append(stats)
     
@@ -139,15 +180,22 @@ with tab1:
     for idx, (_, row) in enumerate(comparison_df.iterrows()):
         with cols[idx]:
             grade_color = {'S': '🥇', 'A': '🥈', 'B': '🥉', 'C': '⭐'}.get(row['등급'], '📍')
+            
+            # 목표달성률 표시 (색상)
+            achievement_color = '#4CAF50' if row.get('목표달성률', 0) >= 100 else '#FF9800' if row.get('목표달성률', 0) >= 80 else '#F44336'
+            
             st.markdown(f"""
-            <div style="border: 2px solid #4CAF50; border-radius: 10px; padding: 15px; margin: 5px;">
+            <div style="border: 2px solid {achievement_color}; border-radius: 10px; padding: 15px; margin: 5px;">
                 <h4>{grade_color} {row['총판']}</h4>
                 <p><b>등급:</b> {row['등급']}</p>
                 <p><b>주문:</b> {row['주문부수']:,.0f}부</p>
                 <p><b>점유율:</b> {row['점유율(%)']:.2f}%</p>
                 <p><b>시장규모:</b> {row['시장규모']:,.0f}명</p>
                 <p><b>학교:</b> {row['거래학교수']}개교</p>
-                {f"<p><b>목표달성:</b> {row['목표달성률']:.1f}%</p>" if row['목표달성률'] > 0 else ""}
+                <hr>
+                {f"<p><b>전체 목표달성:</b> {row['목표달성률']:.1f}%</p>" if row['목표달성률'] > 0 else ""}
+                {f"<p style='font-size:0.9em;'><b>목표1:</b> {row['목표과목1_주문']:,.0f}/{row['목표과목1_목표']:,.0f}부 ({row['목표과목1_달성률']:.1f}%)</p>" if row.get('목표과목1_목표', 0) > 0 else ""}
+                {f"<p style='font-size:0.9em;'><b>목표2:</b> {row['목표과목2_주문']:,.0f}/{row['목표과목2_목표']:,.0f}부 ({row['목표과목2_달성률']:.1f}%)</p>" if row.get('목표과목2_목표', 0) > 0 else ""}
             </div>
             """, unsafe_allow_html=True)
     
@@ -181,14 +229,6 @@ with tab1:
             text='주문부수',
             color='주문부수',
             color_continuous_scale='Blues'
-        )
-        fig2.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-        st.plotly_chart(fig2, use_container_width=True)
-            y='거래학교수',
-            title="총판별 거래 학교 수 비교",
-            text='거래학교수',
-            color='거래학교수',
-            color_continuous_scale='Greens'
         )
         fig2.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
         st.plotly_chart(fig2, use_container_width=True)
