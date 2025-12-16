@@ -384,10 +384,12 @@ with tab3:
     
     if benchmark_type == "지역별 벤치마크" and '시도교육청' in order_df.columns:
         # Regional benchmark
+        school_code_col = '정보공시학교코드' if '정보공시학교코드' in order_df.columns else '학교코드'
+        
         region_stats = order_df.groupby('시도교육청').agg({
             '부수': 'sum',
             '금액': 'sum' if '금액' in order_df.columns else 'count',
-            '학교코드': 'nunique' if '학교코드' in order_df.columns else 'count'
+            school_code_col: 'nunique'
         }).reset_index()
         
         region_stats.columns = ['지역', '주문량', '주문금액', '학교수']
@@ -483,9 +485,11 @@ with tab4:
     st.markdown("---")
     st.subheader("📊 파레토 분석 (80/20 법칙)")
     
+    school_code_col = '정보공시학교코드' if '정보공시학교코드' in order_df.columns else '학교코드'
+    
     analysis_dim = st.selectbox(
         "분석 차원 선택",
-        ['시도교육청', '총판', '과목명', '학교코드'] if '학교코드' in order_df.columns else ['시도교육청', '총판', '과목명']
+        ['시도교육청', '총판', '과목명', school_code_col]
     )
     
     if analysis_dim in order_df.columns:

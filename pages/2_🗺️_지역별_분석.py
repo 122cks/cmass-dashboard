@@ -280,8 +280,20 @@ with tab1:
                         region_orders = filtered_order_df[filtered_order_df['시도교육청'] == region_name]
                         
                         if len(region_orders) > 0:
-                            # Aggregate by subject
-                            subject_summary = region_orders.groupby('과목명')['부수'].sum().reset_index()
+                            # Aggregate by book code (도서코드)
+                            book_code_col = '도서코드(교지명구분)' if '도서코드(교지명구분)' in region_orders.columns else '도서코드'
+                            subject_col = '교과서명_구분' if '교과서명_구분' in region_orders.columns else '과목명'
+                            
+                            if book_code_col in region_orders.columns:
+                                subject_summary = region_orders.groupby(book_code_col).agg({
+                                    '부수': 'sum',
+                                    subject_col: 'first'
+                                }).reset_index()
+                                subject_summary.columns = [book_code_col, '부수', '과목명']
+                            else:
+                                subject_summary = region_orders.groupby(subject_col)['부수'].sum().reset_index()
+                                subject_summary.columns = ['과목명', '부수']
+                            
                             subject_summary = subject_summary.sort_values('부수', ascending=False)
                             
                             st.dataframe(

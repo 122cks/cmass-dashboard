@@ -78,12 +78,14 @@ with tab1:
     
     # Aggregate by book
     subject_col = '교과서명_구분' if '교과서명_구분' in filtered_df.columns else '과목명'
+    school_code_col = '정보공시학교코드' if '정보공시학교코드' in filtered_df.columns else '학교코드'
+    
     if '도서코드' in filtered_df.columns and subject_col in filtered_df.columns:
         book_stats = filtered_df.groupby(['도서코드', subject_col, '교지명']).agg({
             '부수': 'sum',
             '금액': 'sum' if '금액' in filtered_df.columns else 'count',
             '정가': 'first' if '정가' in filtered_df.columns else 'count',
-            '학교코드': 'nunique' if '학교코드' in filtered_df.columns else 'count'
+            school_code_col: 'nunique'
         }).reset_index()
         
         book_stats.columns = ['도서코드', '과목명', '교지명', '주문부수', '주문금액', '정가', '주문학교수']
@@ -239,7 +241,8 @@ with tab3:
                     st.metric("총 금액", f"{total_amt:,.0f}원")
                 
                 with col3:
-                    school_count = code_data['학교코드'].nunique() if '학교코드' in code_data.columns else len(code_data)
+                    school_code_col = '정보공시학교코드' if '정보공시학교코드' in code_data.columns else '학교코드'
+                    school_count = code_data[school_code_col].nunique()
                     st.metric("주문 학교", f"{school_count}개교")
                 
                 # Regional distribution

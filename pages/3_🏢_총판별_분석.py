@@ -59,10 +59,12 @@ if '총판' in filtered_order_df.columns:
         st.subheader("총판별 판매 현황")
         
         # Distributor statistics
+        school_code_col = '정보공시학교코드' if '정보공시학교코드' in filtered_order_df.columns else '학교코드'
+        
         dist_stats = filtered_order_df.groupby('총판').agg({
             '부수': 'sum',
             '금액': 'sum' if '금액' in filtered_order_df.columns else 'count',
-            '학교코드': 'nunique' if '학교코드' in filtered_order_df.columns else 'count',
+            school_code_col: 'nunique',
             '과목명': 'nunique' if '과목명' in filtered_order_df.columns else 'count'
         }).reset_index()
         

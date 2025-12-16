@@ -273,9 +273,11 @@ with tab2:
     
     selected_grade = st.selectbox("상세 조회할 등급 선택", selected_grades)
     
+    school_code_col = '정보공시학교코드' if '정보공시학교코드' in filtered_order.columns else '학교코드'
+    
     grade_distributors = filtered_order[filtered_order['등급'] == selected_grade].groupby('총판').agg({
         '부수': 'sum',
-        '학교코드': 'nunique' if '학교코드' in filtered_order.columns else 'count',
+        school_code_col: 'nunique',
         '과목명': 'nunique'
     }).reset_index()
     grade_distributors.columns = ['총판', '주문부수', '거래학교수', '취급과목수']
@@ -353,8 +355,19 @@ with tab3:
 with tab4:
     st.subheader("📚 등급별 과목 분석")
     
-    # Subject distribution by grade
-    subject_by_grade = filtered_order.groupby(['등급', '과목명'])['부수'].sum().reset_index()
+    # Subject distribution by grade (도서코드 기준)
+    book_code_col = '도서코드(교지명구분)' if '도서코드(교지명구분)' in filtered_order.columns else '도서코드'
+    subject_col = '교과서명_구분' if '교과서명_구분' in filtered_order.columns else '과목명'
+    
+    if book_code_col in filtered_order.columns:
+        subject_by_grade = filtered_order.groupby(['등급', book_code_col]).agg({
+            '부수': 'sum',
+            subject_col: 'first'
+        }).reset_index()
+        subject_by_grade.columns = ['등급', book_code_col, '부수', '과목명']
+    else:
+        subject_by_grade = filtered_order.groupby(['등급', subject_col])['부수'].sum().reset_index()
+        subject_by_grade.columns = ['등급', '과목명', '부수']
     
     # Get top subjects overall
     top_subjects = subject_by_grade.groupby('과목명')['부수'].sum().sort_values(ascending=False).head(15).index

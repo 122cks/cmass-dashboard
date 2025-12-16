@@ -413,11 +413,24 @@ with tab3:
 with tab4:
     st.subheader("📚 과목별 판매 비교")
     
-    # Subject distribution for each distributor
+    # Subject distribution for each distributor (도서코드 기준)
     subject_comparison = []
     for dist in selected_distributors:
         dist_orders = filtered_order[filtered_order['총판'] == dist]
-        subject = dist_orders.groupby('과목명')['부수'].sum().reset_index()
+        
+        book_code_col = '도서코드(교지명구분)' if '도서코드(교지명구분)' in dist_orders.columns else '도서코드'
+        subject_col = '교과서명_구분' if '교과서명_구분' in dist_orders.columns else '과목명'
+        
+        if book_code_col in dist_orders.columns:
+            subject = dist_orders.groupby(book_code_col).agg({
+                '부수': 'sum',
+                subject_col: 'first'
+            }).reset_index()
+            subject.columns = [book_code_col, '부수', '과목명']
+        else:
+            subject = dist_orders.groupby(subject_col)['부수'].sum().reset_index()
+            subject.columns = ['과목명', '부수']
+        
         subject['총판'] = dist
         subject_comparison.append(subject)
     

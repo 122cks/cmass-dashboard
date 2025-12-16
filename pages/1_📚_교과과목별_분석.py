@@ -68,12 +68,13 @@ with tab1:
     
     # Group by BOOK CODE first (도서코드로 먼저 구분!)
     book_code_col = '도서코드(교지명구분)' if '도서코드(교지명구분)' in filtered_order_df.columns else '도서코드'
+    school_code_col = '정보공시학교코드' if '정보공시학교코드' in filtered_order_df.columns else '학교코드'
     
     if book_code_col in filtered_order_df.columns:
         subject_stats = filtered_order_df.groupby(book_code_col).agg({
             '부수': 'sum',
             '금액': 'sum' if '금액' in filtered_order_df.columns else 'count',
-            '학교코드': 'nunique' if '학교코드' in filtered_order_df.columns else 'count',
+            school_code_col: 'nunique',
             '교과서명_구분': 'first' if '교과서명_구분' in filtered_order_df.columns else 'count'
         }).reset_index()
         
@@ -84,7 +85,7 @@ with tab1:
         subject_stats = filtered_order_df.groupby(subject_col).agg({
             '부수': 'sum',
             '금액': 'sum' if '금액' in filtered_order_df.columns else 'count',
-            '학교코드': 'nunique' if '학교코드' in filtered_order_df.columns else 'count'
+            school_code_col: 'nunique'
         }).reset_index()
         
         subject_stats.columns = ['과목명', '주문부수', '주문금액', '학교수']
@@ -175,18 +176,31 @@ with tab2:
         for group in group_stats['교과군'].head(5):
             with st.expander(f"📖 {group}"):
                 group_data = filtered_order_df[filtered_order_df['교과군'] == group]
-                subject_col = '교과서명_구분' if '교과서명_구분' in group_data.columns else '과목명'
-                subject_breakdown = group_data.groupby(subject_col)['부수'].sum().sort_values(ascending=False)
+                
+                # 도서코드 기준으로 그룹화
+                book_code_col = '도서코드(교지명구분)' if '도서코드(교지명구분)' in group_data.columns else '도서코드'
+                if book_code_col in group_data.columns:
+                    subject_breakdown = group_data.groupby(book_code_col).agg({
+                        '부수': 'sum',
+                        '교과서명_구분': 'first' if '교과서명_구분' in group_data.columns else 'count'
+                    })
+                    subject_breakdown.columns = ['주문부수', '과목명']
+                    subject_breakdown = subject_breakdown.sort_values('주문부수', ascending=False)
+                else:
+                    subject_col = '교과서명_구분' if '교과서명_구분' in group_data.columns else '과목명'
+                    subject_breakdown = group_data.groupby(subject_col)['부수'].sum().sort_values(ascending=False)
+                    subject_breakdown = pd.DataFrame({'과목명': subject_breakdown.index, '주문부수': subject_breakdown.values})
                 
                 col1, col2 = st.columns([1, 2])
                 with col1:
-                    for subject, count in subject_breakdown.items():
-                        st.write(f"• **{subject}**: {count:,}부")
+                    for _, row in subject_breakdown.iterrows():
+                        st.write(f"• **{row['과목명']}**: {row['주문부수']:,}부")
                 
                 with col2:
                     fig = px.bar(
-                        x=subject_breakdown.values,
-                        y=subject_breakdown.index,
+                        subject_breakdown,
+                        x='주문부수',
+                        y='과목명',
                         orientation='h',
                         title=f"{group} - 과목별 분포"
                     )
@@ -221,11 +235,13 @@ with tab3:
         
         if middle_high:
             # Statistics by school level
+            school_code_col = '정보공시학교코드' if '정보공시학교코드' in filtered_order_df.columns else '학교코드'
+            
             level_stats = filtered_order_df[filtered_order_df['학교급명'].isin(middle_high)].groupby('학교급명').agg({
                 '부수': 'sum',
                 '금액': 'sum' if '금액' in filtered_order_df.columns else 'count',
                 '과목명': 'nunique',
-                '학교코드': 'nunique' if '학교코드' in filtered_order_df.columns else 'count'
+                school_code_col: 'nunique'
             }).reset_index()
             level_stats.columns = ['학교급', '주문부수', '주문금액', '과목수', '학교수']
             
