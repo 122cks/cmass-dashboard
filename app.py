@@ -139,6 +139,7 @@ st.markdown("---")
 # Display market analysis insights
 st.header("📊 시장 규모 분석 (2026년도 기준)")
 st.caption("💡 2025년 주문한 교과서는 2026년에 사용합니다. 현재 1학년 → 내년 2학년을 기준으로 정확한 시장 규모를 산정했습니다.")
+st.info("⚠️ 과목명의 숫자(1, 2)는 학기를 의미합니다. 예: 한국사 1 = 1학기, 한국사 2 = 2학기 (학년 아님)")
 
 if not market_analysis.empty:
     col1, col2 = st.columns([2, 1])
@@ -148,7 +149,7 @@ if not market_analysis.empty:
         top_accurate = market_analysis.nlargest(10, '점유율(%)')
         st.subheader("📚 과목별 정확 점유율 TOP 10")
         for idx, row in top_accurate.iterrows():
-            grade_info = f" ({row['대상학년']})" if row['대상학년'] != '전체' else ""
+            grade_info = f" ({row['대상학년']})" if row['대상학년'] != '전체' else " (전 학년)"
             st.write(f"{top_accurate.index.tolist().index(idx) + 1}. **{row['과목명']}**{grade_info}: "
                     f"{row['점유율(%)']:.2f}% | 시장: {row['시장규모(학생수)']:,.0f}명 | 주문: {row['주문부수']:,.0f}부")
     
