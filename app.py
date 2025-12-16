@@ -10,8 +10,8 @@ from market_size_v2 import calculate_market_size_by_subject_v2
 
 # Grade sorting function for distributors
 def get_grade_order(grade):
-    """Convert grade to number for sorting (S=1, A=2, B=3, C=4, D=5, E=6, etc.)"""
-    grade_map = {'S': 1, 'A': 2, 'B': 3, 'C': 4, 'D': 5, 'E': 6}
+    """Convert grade to number for sorting (S=1, A=2, B=3, C=4, D=5, E=6, G=7, etc.)"""
+    grade_map = {'S': 1, 'A': 2, 'B': 3, 'C': 4, 'D': 5, 'E': 6, 'G': 7}
     if pd.isna(grade):
         return 999
     return grade_map.get(str(grade).upper(), 99)

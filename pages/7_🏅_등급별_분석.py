@@ -29,8 +29,8 @@ else:
 # Sidebar filters
 st.sidebar.header("🔍 필터 옵션")
 
-# Sort grades: S, A, B, C, D, E, then others
-grade_order = ['S', 'A', 'B', 'C', 'D', 'E']
+# Sort grades: S, A, B, C, D, E, G, then others
+grade_order = ['S', 'A', 'B', 'C', 'D', 'E', 'G']
 all_grades = order_df['등급'].unique().tolist()
 available_grades = [g for g in grade_order if g in all_grades]
 available_grades += sorted([g for g in all_grades if g not in grade_order and g != '미분류'])
@@ -134,8 +134,8 @@ with tab1:
     cols = st.columns(len(selected_grades))
     for idx, (_, row) in enumerate(grade_df.iterrows()):
         with cols[idx]:
-            grade_emoji = {'S': '🥇', 'A': '🥈', 'B': '🥉', 'C': '⭐', 'D': '📌', '미분류': '📍'}.get(row['등급'], '📌')
-            grade_color = {'S': '#FFD700', 'A': '#C0C0C0', 'B': '#CD7F32', 'C': '#4CAF50', 'D': '#2196F3', '미분류': '#9E9E9E'}.get(row['등급'], '#4CAF50')
+            grade_emoji = {'S': '🥇', 'A': '🥈', 'B': '🥉', 'C': '⭐', 'D': '📌', 'E': '🔵', 'G': '⚪', '미분류': '📍'}.get(row['등급'], '📌')
+            grade_color = {'S': '#FFD700', 'A': '#C0C0C0', 'B': '#CD7F32', 'C': '#4CAF50', 'D': '#2196F3', 'E': '#9C27B0', 'G': '#607D8B', '미분류': '#9E9E9E'}.get(row['등급'], '#4CAF50')
             
             st.markdown(f"""
             <div style="border: 3px solid {grade_color}; border-radius: 15px; padding: 20px; margin: 10px 0;">
