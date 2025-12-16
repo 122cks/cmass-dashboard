@@ -116,8 +116,6 @@ def load_data():
             right_on='코드',
             how='left'
         )
-            how='left'
-        )
 
         # Add school level to subject name for clarity (중등 정보 vs 고등 정보)
         def add_school_level_to_subject(row):
