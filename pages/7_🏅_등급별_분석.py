@@ -80,24 +80,22 @@ tab1, tab2, tab3, tab4 = st.tabs(["📊 등급별 현황", "📈 성과 비교",
 with tab1:
     st.subheader("등급별 총판 현황")
     
-    # Get total_df for market size calculation
-    total_df = st.session_state.get('total_df', pd.DataFrame())
+    # Get market size by level from session
+    market_size_by_level = st.session_state.get('market_size_by_level', {})
+    
+    # Use total national market size (중등 1,2학년 + 고등 1,2학년)
+    total_market_size = market_size_by_level.get('전체', 0)
     
     # Calculate statistics by grade with market share
     grade_stats = []
     for grade in selected_grades:
         grade_data = filtered_order[filtered_order['등급'] == grade]
         
-        # Calculate market size for this grade's schools
-        school_code_col = '정보공시학교코드' if '정보공시학교코드' in grade_data.columns else '학교코드'
-        school_codes = grade_data[school_code_col].unique() if school_code_col in grade_data.columns else []
+        # Use total national market size
+        market_size = total_market_size
         
-        # Calculate total market size (student count) for these schools
-        if not total_df.empty and len(school_codes) > 0:
-            grade_schools = total_df[total_df['정보공시 학교코드'].isin(school_codes.astype(str))]
-            market_size = grade_schools['학생수(계)'].sum() if not grade_schools.empty else 0
-        else:
-            market_size = 0
+        # Calculate school code column
+        school_code_col = '정보공시학교코드' if '정보공시학교코드' in grade_data.columns else '학교코드'
         
         stats = {
             '등급': grade,

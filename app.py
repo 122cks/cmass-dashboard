@@ -156,12 +156,27 @@ def load_data():
     # Fallback to V1 if V2 fails
     if market_analysis.empty:
         market_analysis = calculate_market_size_by_subject(order_df, total_df, product_df)
+    
+    # Calculate total market size by school level for comparison analysis
+    # 중등 = 중학교 1,2학년 / 고등 = 고등학교 1,2학년
+    market_size_by_level = {}
+    if not total_df.empty:
+        # 중학교 (학교급코드 = 3)
+        middle_schools = total_df[total_df['학교급코드'] == 3]
+        market_size_by_level['중등'] = middle_schools['1학년 학생수'].sum() + middle_schools['2학년 학생수'].sum()
+        
+        # 고등학교 (학교급코드 = 4)
+        high_schools = total_df[total_df['학교급코드'] == 4]
+        market_size_by_level['고등'] = high_schools['1학년 학생수'].sum() + high_schools['2학년 학생수'].sum()
+        
+        # 전체
+        market_size_by_level['전체'] = market_size_by_level['중등'] + market_size_by_level['고등']
 
-    return total_df, order_df, target_df, product_df, distributor_df, market_analysis
+    return total_df, order_df, target_df, product_df, distributor_df, market_analysis, market_size_by_level
 
 # Load data
 try:
-    total_df, order_df, target_df, product_df, distributor_df, market_analysis = load_data()
+    total_df, order_df, target_df, product_df, distributor_df, market_analysis, market_size_by_level = load_data()
     
     # Store in session state for access across pages
     st.session_state['total_df'] = total_df
@@ -170,6 +185,7 @@ try:
     st.session_state['product_df'] = product_df
     st.session_state['distributor_df'] = distributor_df
     st.session_state['market_analysis'] = market_analysis
+    st.session_state['market_size_by_level'] = market_size_by_level  # Store market size by school level
     st.session_state['sort_by_grade'] = sort_by_grade  # Store sorting function
 except FileNotFoundError as e:
     st.error(f"파일을 찾을 수 없습니다: {e}")

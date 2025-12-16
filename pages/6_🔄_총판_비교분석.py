@@ -50,9 +50,12 @@ tab1, tab2, tab3, tab4 = st.tabs(["📊 종합 비교", "📈 실적 대비", "�
 with tab1:
     st.subheader("총판별 종합 성과 비교")
     
-    # Get market analysis data for accurate market size calculation
-    market_analysis = st.session_state.get('market_analysis', pd.DataFrame())
-    total_df = st.session_state.get('total_df', pd.DataFrame())
+    # Get market size by level from session
+    market_size_by_level = st.session_state.get('market_size_by_level', {})
+    
+    # For now, use '전체' market size (중등 1,2학년 + 고등 1,2학년)
+    # TODO: In future, could filter by school level if needed
+    total_market_size = market_size_by_level.get('전체', 0)
     
     # Calculate comprehensive statistics with market share
     comparison_stats = []
@@ -63,16 +66,8 @@ with tab1:
         school_code_col = '정보공시학교코드' if '정보공시학교코드' in dist_data.columns else '학교코드'
         subject_col = '교과서명_구분' if '교과서명_구분' in dist_data.columns else '교과서명'
         
-        # Calculate market size for this distributor's schools
-        # Get unique schools served by this distributor
-        school_codes = dist_data[school_code_col].unique() if school_code_col in dist_data.columns else []
-        
-        # Calculate total market size (student count) for these schools
-        if not total_df.empty and len(school_codes) > 0:
-            dist_schools = total_df[total_df['정보공시 학교코드'].isin(school_codes.astype(str))]
-            market_size = dist_schools['학생수(계)'].sum() if not dist_schools.empty else 0
-        else:
-            market_size = 0
+        # Use total national market size (중등 1,2학년 + 고등 1,2학년)
+        market_size = total_market_size
         
         stats = {
             '총판': dist,
