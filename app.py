@@ -1,6 +1,11 @@
 import streamlit as st
 import pandas as pd
 import os
+import sys
+
+# Add utils directory to path
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'utils'))
+from market_size import calculate_market_size_by_subject
 
 # Set page config
 st.set_page_config(
@@ -75,12 +80,15 @@ def load_data():
         total_df['정보공시 학교코드'] = total_df['정보공시 학교코드'].astype(str)
     if '정보공시학교코드' in order_df.columns:
         order_df['정보공시학교코드'] = order_df['정보공시학교코드'].astype(str)
+    
+    # Calculate accurate market size by subject
+    market_analysis = calculate_market_size_by_subject(order_df, total_df, product_df)
 
-    return total_df, order_df, target_df, product_df, distributor_df
+    return total_df, order_df, target_df, product_df, distributor_df, market_analysis
 
 # Load data
 try:
-    total_df, order_df, target_df, product_df, distributor_df = load_data()
+    total_df, order_df, target_df, product_df, distributor_df, market_analysis = load_data()
     
     # Store in session state for access across pages
     st.session_state['total_df'] = total_df
@@ -88,8 +96,12 @@ try:
     st.session_state['target_df'] = target_df
     st.session_state['product_df'] = product_df
     st.session_state['distributor_df'] = distributor_df
+    st.session_state['market_analysis'] = market_analysis
 except FileNotFoundError as e:
     st.error(f"파일을 찾을 수 없습니다: {e}")
+    st.stop()
+except Exception as e:
+    st.error(f"데이터 로드 중 오류 발생: {e}")
     st.stop()
 
 # Main Page - Dashboard
@@ -101,19 +113,57 @@ col1, col2, col3, col4 = st.columns(4)
 
 with col1:
     total_students = total_df['학생수(계)'].sum()
-    st.metric("전체 학생수", f"{total_students:,.0f}명")
+    st.metric("2025년 전체 학생수", f"{total_students:,.0f}명")
 
 with col2:
     total_orders = order_df['부수'].sum()
-    st.metric("총 주문 부수", f"{total_orders:,.0f}부")
+    st.metric("2026년용 주문 부수", f"{total_orders:,.0f}부")
 
 with col3:
-    overall_share = (total_orders / total_students) * 100
-    st.metric("전체 점유율", f"{overall_share:.2f}%")
+    # Calculate accurate overall share from market_analysis
+    if not market_analysis.empty:
+        total_market = market_analysis['시장규모(학생수)'].sum()
+        accurate_share = (total_orders / total_market * 100) if total_market > 0 else 0
+        st.metric("정확 점유율", f"{accurate_share:.2f}%", 
+                 help="각 과목의 대상 학년별 시장 규모를 기준으로 계산")
+    else:
+        overall_share = (total_orders / total_students) * 100
+        st.metric("전체 점유율", f"{overall_share:.2f}%")
 
 with col4:
     total_schools = order_df['학교코드'].nunique() if '학교코드' in order_df.columns else order_df['정보공시학교코드'].nunique()
     st.metric("주문 학교 수", f"{total_schools:,}개교")
+
+st.markdown("---")
+
+# Display market analysis insights
+st.header("📊 시장 규모 분석 (2026년도 기준)")
+st.caption("💡 2025년 주문한 교과서는 2026년에 사용합니다. 현재 1학년 → 내년 2학년을 기준으로 정확한 시장 규모를 산정했습니다.")
+
+if not market_analysis.empty:
+    col1, col2 = st.columns([2, 1])
+    
+    with col1:
+        # Top subjects by accurate market share
+        top_accurate = market_analysis.nlargest(10, '점유율(%)')
+        st.subheader("📚 과목별 정확 점유율 TOP 10")
+        for idx, row in top_accurate.iterrows():
+            grade_info = f" ({row['대상학년']})" if row['대상학년'] != '전체' else ""
+            st.write(f"{top_accurate.index.tolist().index(idx) + 1}. **{row['과목명']}**{grade_info}: "
+                    f"{row['점유율(%)']:.2f}% | 시장: {row['시장규모(학생수)']:,.0f}명 | 주문: {row['주문부수']:,.0f}부")
+    
+    with col2:
+        st.subheader("🎯 시장 분석 요약")
+        avg_share = market_analysis['점유율(%)'].mean()
+        st.metric("평균 점유율", f"{avg_share:.2f}%")
+        
+        high_share = len(market_analysis[market_analysis['점유율(%)'] > 50])
+        st.metric("50% 이상 과목", f"{high_share}개")
+        
+        total_market_size = market_analysis['시장규모(학생수)'].sum()
+        st.metric("전체 대상 시장", f"{total_market_size:,.0f}명")
+else:
+    st.info("시장 분석 데이터를 계산중입니다...")
 
 st.markdown("---")
 
