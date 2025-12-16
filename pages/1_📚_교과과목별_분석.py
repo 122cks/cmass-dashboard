@@ -66,8 +66,9 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 과목별 현황", "📈 교과군
 with tab1:
     st.subheader("과목별 주문 현황")
     
-    # Group by subject
-    subject_stats = filtered_order_df.groupby('과목명').agg({
+    # Group by subject (use subject_col for school level distinction)
+    subject_col = '교과서명_구분' if '교과서명_구분' in filtered_order_df.columns else '과목명'
+    subject_stats = filtered_order_df.groupby(subject_col).agg({
         '부수': 'sum',
         '금액': 'sum' if '금액' in filtered_order_df.columns else 'count',
         '학교코드': 'nunique' if '학교코드' in filtered_order_df.columns else 'count'
@@ -160,7 +161,8 @@ with tab2:
         for group in group_stats['교과군'].head(5):
             with st.expander(f"📖 {group}"):
                 group_data = filtered_order_df[filtered_order_df['교과군'] == group]
-                subject_breakdown = group_data.groupby('과목명')['부수'].sum().sort_values(ascending=False)
+                subject_col = '교과서명_구분' if '교과서명_구분' in group_data.columns else '과목명'
+                subject_breakdown = group_data.groupby(subject_col)['부수'].sum().sort_values(ascending=False)
                 
                 col1, col2 = st.columns([1, 2])
                 with col1:
