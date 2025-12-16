@@ -67,19 +67,20 @@ with tab1:
         st.markdown("---")
         st.subheader("과목별 비교")
         
-        subject_a = data_a.groupby('과목명')['부수'].sum().reset_index()
-        subject_a.columns = ['과목명', region_a]
+        subject_col = '교과서명_구분' if '교과서명_구분' in data_a.columns else '과목명'
+        subject_a = data_a.groupby(subject_col)['부수'].sum().reset_index()
+        subject_a.columns = [subject_col, region_a]
         
-        subject_b = data_b.groupby('과목명')['부수'].sum().reset_index()
-        subject_b.columns = ['과목명', region_b]
+        subject_b = data_b.groupby(subject_col)['부수'].sum().reset_index()
+        subject_b.columns = [subject_col, region_b]
         
-        comparison_df = pd.merge(subject_a, subject_b, on='과목명', how='outer').fillna(0)
+        comparison_df = pd.merge(subject_a, subject_b, on=subject_col, how='outer').fillna(0)
         comparison_df['차이'] = comparison_df[region_a] - comparison_df[region_b]
         comparison_df = comparison_df.sort_values('차이', key=abs, ascending=False).head(15)
         
         fig = go.Figure()
-        fig.add_trace(go.Bar(name=region_a, x=comparison_df['과목명'], y=comparison_df[region_a]))
-        fig.add_trace(go.Bar(name=region_b, x=comparison_df['과목명'], y=comparison_df[region_b]))
+        fig.add_trace(go.Bar(name=region_a, x=comparison_df[subject_col], y=comparison_df[region_a]))
+        fig.add_trace(go.Bar(name=region_b, x=comparison_df[subject_col], y=comparison_df[region_b]))
         fig.update_layout(title="과목별 주문량 비교 TOP 15", barmode='group', height=400, xaxis_tickangle=-45)
         st.plotly_chart(fig, use_container_width=True)
     

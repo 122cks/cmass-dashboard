@@ -421,8 +421,9 @@ with tab3:
             st.markdown("---")
             st.subheader("📚 시군구별 과목 분포")
             
-            if '교과서명' in city_orders.columns:
-                city_subject = city_orders.groupby(['시군구2', '교과서명'])['부수'].sum().reset_index()
+            subject_col = '교과서명_구분' if '교과서명_구분' in city_orders.columns else '교과서명'
+            if subject_col in city_orders.columns:
+                city_subject = city_orders.groupby(['시군구2', subject_col])['부수'].sum().reset_index()
                 
                 # Select city for detailed view
                 selected_city = st.selectbox(
@@ -439,7 +440,7 @@ with tab3:
                     with col1:
                         fig = px.bar(
                             city_subject_filtered.head(10),
-                            x='교과서명',
+                            x=subject_col,
                             y='부수',
                             title=f"{selected_city} - 과목별 주문 현황",
                             text='부수',
@@ -455,7 +456,7 @@ with tab3:
                         fig_pie = px.pie(
                             city_subject_filtered.head(8),
                             values='부수',
-                            names='교과서명',
+                            names=subject_col,
                             title=f"{selected_city} - 과목 구성"
                         )
                         st.plotly_chart(fig_pie, use_container_width=True)
@@ -469,14 +470,14 @@ with tab3:
                 else:
                     # Heatmap - Top cities vs Top subjects
                     top_cities = city_stats.head(10)['시군구'].tolist()
-                    top_subjects = city_orders.groupby('교과서명')['부수'].sum().nlargest(10).index.tolist()
+                    top_subjects = city_orders.groupby(subject_col)['부수'].sum().nlargest(10).index.tolist()
                     
                     heatmap_data = city_subject[
                         (city_subject['시군구2'].isin(top_cities)) &
-                        (city_subject['교과서명'].isin(top_subjects))
+                        (city_subject[subject_col].isin(top_subjects))
                     ].pivot_table(
                         index='시군구2',
-                        columns='교과서명',
+                        columns=subject_col,
                         values='부수',
                         fill_value=0
                     )

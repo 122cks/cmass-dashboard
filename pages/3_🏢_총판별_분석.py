@@ -247,11 +247,13 @@ if '총판' in filtered_order_df.columns:
                         dist_orders = filtered_order_df[filtered_order_df['총판'] == dist_name]
                         
                         # Subject breakdown
+                        subject_col = '교과서명_구분' if '교과서명_구분' in dist_orders.columns else '교과서명'
                         st.markdown("**📚 과목별 주문**")
-                        subject_summary = dist_orders.groupby('과목명')['부수'].sum().reset_index()
+                        subject_summary = dist_orders.groupby(subject_col)['부수'].sum().reset_index()
                         subject_summary = subject_summary.sort_values('부수', ascending=False)
+                        subject_summary.columns = ['과목명', '주문부수']
                         st.dataframe(
-                            subject_summary.style.format({'부수': '{:,.0f}'}),
+                            subject_summary.style.format({'주문부수': '{:,.0f}'}),
                             use_container_width=True,
                             height=150
                         )

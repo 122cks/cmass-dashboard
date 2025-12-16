@@ -77,8 +77,9 @@ with tab1:
     st.subheader("교과서별 주문 현황")
     
     # Aggregate by book
-    if '도서코드' in filtered_df.columns and '과목명' in filtered_df.columns:
-        book_stats = filtered_df.groupby(['도서코드', '과목명', '교지명']).agg({
+    subject_col = '교과서명_구분' if '교과서명_구분' in filtered_df.columns else '과목명'
+    if '도서코드' in filtered_df.columns and subject_col in filtered_df.columns:
+        book_stats = filtered_df.groupby(['도서코드', subject_col, '교지명']).agg({
             '부수': 'sum',
             '금액': 'sum' if '금액' in filtered_df.columns else 'count',
             '정가': 'first' if '정가' in filtered_df.columns else 'count',
