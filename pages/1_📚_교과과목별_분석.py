@@ -400,28 +400,38 @@ with tab4:
     st.markdown("#### 🗺️ 지역 × 과목 히트맵")
     
     if '시도교육청' in filtered_order_df.columns:
+        # Use the same subject column as in subject_stats
+        subject_col = '교과서명_구분' if '교과서명_구분' in filtered_order_df.columns else '과목명'
+        
         # Create pivot table for heatmap
         pivot_data = filtered_order_df.pivot_table(
             index='시도교육청',
-            columns='과목명',
+            columns=subject_col,
             values='부수',
             aggfunc='sum',
             fill_value=0
         )
         
-        # Select top subjects and regions
+        # Select top subjects and regions (using the same column names from subject_stats)
         top_subjects_list = subject_stats.head(10)['과목명'].tolist()
-        pivot_data_filtered = pivot_data[top_subjects_list]
         
-        fig_heatmap = px.imshow(
-            pivot_data_filtered,
-            title="지역별 × 과목별 주문 분포 (TOP 10 과목)",
-            labels=dict(x="과목", y="지역", color="주문 부수"),
-            aspect="auto",
-            color_continuous_scale='YlOrRd'
-        )
-        fig_heatmap.update_layout(height=600)
-        st.plotly_chart(fig_heatmap, use_container_width=True)
+        # Filter only the columns that exist in pivot_data
+        top_subjects_list = [s for s in top_subjects_list if s in pivot_data.columns]
+        
+        if top_subjects_list:
+            pivot_data_filtered = pivot_data[top_subjects_list]
+            
+            fig_heatmap = px.imshow(
+                pivot_data_filtered,
+                title="지역별 × 과목별 주문 분포 (TOP 10 과목)",
+                labels=dict(x="과목", y="지역", color="주문 부수"),
+                aspect="auto",
+                color_continuous_scale='YlOrRd'
+            )
+            fig_heatmap.update_layout(height=600)
+            st.plotly_chart(fig_heatmap, use_container_width=True)
+        else:
+            st.info("히트맵을 표시할 데이터가 충분하지 않습니다.")
 
 with tab4:
     st.subheader("📋 상세 데이터 테이블")
