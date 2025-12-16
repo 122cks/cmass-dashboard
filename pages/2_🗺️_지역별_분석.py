@@ -12,6 +12,35 @@ if 'total_df' not in st.session_state or 'order_df' not in st.session_state:
 
 total_df = st.session_state['total_df']
 order_df = st.session_state['order_df']
+distributor_df = st.session_state.get('distributor_df', pd.DataFrame())
+
+# Add distributor info to order data (시군구 정보 추가)
+if not distributor_df.empty and '총판명' in distributor_df.columns:
+    # Create mapping from distributor name to region info
+    dist_region_map = {}
+    for _, row in distributor_df.iterrows():
+        dist_name = str(row.get('총판명', ''))
+        if dist_name:
+            dist_region_map[dist_name] = {
+                '지역': row.get('지 역', ''),
+                '시도': row.get('시도', ''),
+                '시군구': row.get('시군구', ''),
+                '시군구2': row.get('시군구2', ''),
+                '등급': row.get('등급', '')
+            }
+    
+    # Match order data with distributor info
+    def get_region_info(dist_name, info_type):
+        if pd.isna(dist_name):
+            return None
+        for key, value in dist_region_map.items():
+            if key in str(dist_name) or str(dist_name) in key:
+                return value.get(info_type)
+        return None
+    
+    order_df['시군구'] = order_df['총판'].apply(lambda x: get_region_info(x, '시군구'))
+    order_df['시군구2'] = order_df['총판'].apply(lambda x: get_region_info(x, '시군구2'))
+    order_df['총판지역'] = order_df['총판'].apply(lambda x: get_region_info(x, '지역'))
 
 st.title("🗺️ 지역별 상세 분석")
 st.markdown("---")
@@ -107,7 +136,7 @@ with col4:
 st.markdown("---")
 
 # Tab Layout
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["🗺️ 시도별 분석", "🏫 교육청별 분석", "📊 학교급별 분석", "🧭 남도/북도 비교", "📋 상세 테이블"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["🗺️ 시도별 분석", "🏫 교육청별 분석", "🏘️ 시군구별 분석", "📊 학교급별 분석", "🧭 남도/북도 비교", "📋 상세 테이블"])
 
 with tab1:
     st.subheader("시도교육청별 점유율 분석")
@@ -306,6 +335,165 @@ with tab2:
         st.info("교육지원청 정보가 없습니다.")
 
 with tab3:
+    st.subheader("🏘️ 시군구별 분석")
+    st.caption("총판 정보의 시군구 데이터를 기반으로 더 넓은 범위의 지역 분석을 제공합니다.")
+    
+    # Check if we have city/county data
+    if '시군구2' in order_df.columns and not order_df['시군구2'].isna().all():
+        # Get orders with city/county info
+        city_orders = filtered_order_df[filtered_order_df['시군구2'].notna()].copy()
+        
+        if not city_orders.empty:
+            # Aggregate by city/county
+            city_stats = city_orders.groupby('시군구2').agg({
+                '부수': 'sum',
+                '총판': 'nunique'
+            }).reset_index()
+            city_stats.columns = ['시군구', '주문부수', '총판수']
+            city_stats = city_stats.sort_values('주문부수', ascending=False)
+            
+            # Key metrics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("총 시군구 수", f"{len(city_stats)}개")
+            with col2:
+                st.metric("총 주문부수", f"{city_stats['주문부수'].sum():,.0f}부")
+            with col3:
+                avg_per_city = city_stats['주문부수'].mean()
+                st.metric("시군구당 평균", f"{avg_per_city:,.0f}부")
+            with col4:
+                top_city = city_stats.iloc[0]
+                st.metric("최다 주문", f"{top_city['시군구']}", f"{top_city['주문부수']:,.0f}부")
+            
+            st.markdown("---")
+            
+            # Charts
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                # Bar chart - Top cities
+                fig_bar = px.bar(
+                    city_stats.head(15),
+                    x='시군구',
+                    y='주문부수',
+                    title="시군구별 주문 현황 TOP 15",
+                    text='주문부수',
+                    color='주문부수',
+                    color_continuous_scale='Blues'
+                )
+                fig_bar.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+                fig_bar.update_layout(height=400, xaxis_tickangle=-45)
+                st.plotly_chart(fig_bar, use_container_width=True)
+            
+            with col2:
+                # Pie chart - Distribution
+                fig_pie = px.pie(
+                    city_stats.head(10),
+                    values='주문부수',
+                    names='시군구',
+                    title="TOP 10 시군구 점유 비율"
+                )
+                fig_pie.update_traces(textposition='inside', textinfo='percent+label')
+                st.plotly_chart(fig_pie, use_container_width=True)
+            
+            # Subject distribution by city
+            st.markdown("---")
+            st.subheader("📚 시군구별 과목 분포")
+            
+            if '교과서명' in city_orders.columns:
+                city_subject = city_orders.groupby(['시군구2', '교과서명'])['부수'].sum().reset_index()
+                
+                # Select city for detailed view
+                selected_city = st.selectbox(
+                    "상세 조회할 시군구 선택",
+                    ['전체'] + sorted(city_stats['시군구'].unique().tolist())
+                )
+                
+                if selected_city != '전체':
+                    city_subject_filtered = city_subject[city_subject['시군구2'] == selected_city]
+                    city_subject_filtered = city_subject_filtered.sort_values('부수', ascending=False)
+                    
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        fig = px.bar(
+                            city_subject_filtered.head(10),
+                            x='교과서명',
+                            y='부수',
+                            title=f"{selected_city} - 과목별 주문 현황",
+                            text='부수',
+                            color='부수',
+                            color_continuous_scale='Viridis'
+                        )
+                        fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+                        fig.update_layout(height=400, xaxis_tickangle=-45)
+                        st.plotly_chart(fig, use_container_width=True)
+                    
+                    with col2:
+                        # Pie chart for selected city
+                        fig_pie = px.pie(
+                            city_subject_filtered.head(8),
+                            values='부수',
+                            names='교과서명',
+                            title=f"{selected_city} - 과목 구성"
+                        )
+                        st.plotly_chart(fig_pie, use_container_width=True)
+                    
+                    # Detailed table
+                    st.markdown("#### 📋 상세 데이터")
+                    st.dataframe(
+                        city_subject_filtered.style.format({'부수': '{:,.0f}'}),
+                        use_container_width=True
+                    )
+                else:
+                    # Heatmap - Top cities vs Top subjects
+                    top_cities = city_stats.head(10)['시군구'].tolist()
+                    top_subjects = city_orders.groupby('교과서명')['부수'].sum().nlargest(10).index.tolist()
+                    
+                    heatmap_data = city_subject[
+                        (city_subject['시군구2'].isin(top_cities)) &
+                        (city_subject['교과서명'].isin(top_subjects))
+                    ].pivot_table(
+                        index='시군구2',
+                        columns='교과서명',
+                        values='부수',
+                        fill_value=0
+                    )
+                    
+                    fig_heatmap = px.imshow(
+                        heatmap_data,
+                        labels=dict(x="과목", y="시군구", color="주문부수"),
+                        title="시군구 × 과목 주문 히트맵 (TOP 10)",
+                        color_continuous_scale='YlOrRd',
+                        aspect='auto'
+                    )
+                    fig_heatmap.update_layout(height=500)
+                    st.plotly_chart(fig_heatmap, use_container_width=True)
+            
+            # Distributor distribution by city
+            st.markdown("---")
+            st.subheader("🏢 시군구별 총판 분포")
+            
+            city_dist = city_orders.groupby('시군구2')['총판'].apply(lambda x: ', '.join(sorted(set(x.dropna())))).reset_index()
+            city_dist = pd.merge(city_dist, city_stats[['시군구', '총판수', '주문부수']], on='시군구')
+            
+            st.dataframe(
+                city_dist.rename(columns={
+                    '시군구': '시군구',
+                    '총판': '담당 총판',
+                    '총판수': '총판 수',
+                    '주문부수': '총 주문부수'
+                }).style.format({'총 주문부수': '{:,.0f}'}),
+                use_container_width=True,
+                height=400
+            )
+            
+        else:
+            st.warning("시군구 정보가 매핑된 주문 데이터가 없습니다.")
+    else:
+        st.info("시군구 정보가 없습니다. 총판정보 파일에 시군구 데이터가 있는지 확인해주세요.")
+
+with tab4:
     st.subheader("학교급별 지역 분석")
     
     if '학교급코드' in filtered_total_df.columns:
