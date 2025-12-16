@@ -124,7 +124,9 @@ def load_data():
     if (not product_df.empty and '코드' in product_df.columns and '학교급' in product_df.columns
             and '도서코드(교지명구분)' in order_df.columns):
         # Create mapping from product code to school level
-        product_df['코드'] = product_df['코드'].astype(str)
+        # 코드 컬럼을 정수로 변환 (NaN 제거 후) → 문자열로 변환
+        product_df = product_df.dropna(subset=['코드'])
+        product_df['코드'] = product_df['코드'].astype(int).astype(str)
         order_df['도서코드(교지명구분)'] = order_df['도서코드(교지명구분)'].astype(str)
 
         # Merge to get school level, subject name and target subject info (목표과목)
@@ -134,8 +136,6 @@ def load_data():
             merge_cols.append('2026 목표과목')
 
         product_merge = product_df[merge_cols].rename(columns={'교과군': '교과군_제품'})
-        product_merge['코드'] = product_merge['코드'].astype(str)
-        order_df['도서코드(교지명구분)'] = order_df['도서코드(교지명구분)'].astype(str)
 
         order_df = pd.merge(
             order_df,
