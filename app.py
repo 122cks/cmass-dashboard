@@ -6,6 +6,7 @@ import sys
 # Add utils directory to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'utils'))
 from market_size import calculate_market_size_by_subject
+from market_size_v2 import calculate_market_size_by_subject_v2
 
 # Grade sorting function for distributors
 def get_grade_order(grade):
@@ -149,8 +150,12 @@ def load_data():
                 grade_map[row['총판명(공식)']] = row['등급']
         order_df['총판등급'] = order_df['총판'].map(grade_map)
     
-    # Calculate accurate market size by subject
-    market_analysis = calculate_market_size_by_subject(order_df, total_df, product_df)
+    # Calculate accurate market size by subject (V2: 학교별 학년 추정)
+    market_analysis = calculate_market_size_by_subject_v2(order_df, total_df, product_df)
+    
+    # Fallback to V1 if V2 fails
+    if market_analysis.empty:
+        market_analysis = calculate_market_size_by_subject(order_df, total_df, product_df)
 
     return total_df, order_df, target_df, product_df, distributor_df, market_analysis
 
