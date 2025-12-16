@@ -66,15 +66,29 @@ tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 과목별 현황", "📈 교
 with tab1:
     st.subheader("과목별 주문 현황")
     
-    # Group by subject (use subject_col for school level distinction)
-    subject_col = '교과서명_구분' if '교과서명_구분' in filtered_order_df.columns else '과목명'
-    subject_stats = filtered_order_df.groupby(subject_col).agg({
-        '부수': 'sum',
-        '금액': 'sum' if '금액' in filtered_order_df.columns else 'count',
-        '학교코드': 'nunique' if '학교코드' in filtered_order_df.columns else 'count'
-    }).reset_index()
+    # Group by BOOK CODE first (도서코드로 먼저 구분!)
+    book_code_col = '도서코드(교지명구분)' if '도서코드(교지명구분)' in filtered_order_df.columns else '도서코드'
     
-    subject_stats.columns = ['과목명', '주문부수', '주문금액', '학교수']
+    if book_code_col in filtered_order_df.columns:
+        subject_stats = filtered_order_df.groupby(book_code_col).agg({
+            '부수': 'sum',
+            '금액': 'sum' if '금액' in filtered_order_df.columns else 'count',
+            '학교코드': 'nunique' if '학교코드' in filtered_order_df.columns else 'count',
+            '교과서명_구분': 'first' if '교과서명_구분' in filtered_order_df.columns else 'count'
+        }).reset_index()
+        
+        subject_stats.columns = ['도서코드', '주문부수', '주문금액', '학교수', '과목명']
+    else:
+        # Fallback: 교과서명_구분으로 그룹화
+        subject_col = '교과서명_구분' if '교과서명_구분' in filtered_order_df.columns else '과목명'
+        subject_stats = filtered_order_df.groupby(subject_col).agg({
+            '부수': 'sum',
+            '금액': 'sum' if '금액' in filtered_order_df.columns else 'count',
+            '학교코드': 'nunique' if '학교코드' in filtered_order_df.columns else 'count'
+        }).reset_index()
+        
+        subject_stats.columns = ['과목명', '주문부수', '주문금액', '학교수']
+    
     subject_stats = subject_stats.sort_values('주문부수', ascending=False)
     
     # Calculate market share

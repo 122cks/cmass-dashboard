@@ -81,13 +81,16 @@ def match_orders_with_student_data(order_df, total_df, year_offset=1):
     if not school_code_col:
         return pd.DataFrame()
     
-    # 학교별 + 과목별로 그룹화
+    # 학교별 + 도서코드별로 그룹화 (과목명이 아닌 도서코드로!)
     groupby_cols = [school_code_col]
     
-    # 과목명 컬럼
-    subject_col = '교과서명_구분' if '교과서명_구분' in order_df.columns else '교과서명'
-    if subject_col in order_df.columns:
-        groupby_cols.append(subject_col)
+    # 도서코드(교지명구분) 컬럼 - 이게 핵심!
+    book_code_col = '도서코드(교지명구분)' if '도서코드(교지명구분)' in order_df.columns else '도서코드'
+    if book_code_col in order_df.columns:
+        groupby_cols.append(book_code_col)
+    else:
+        # 도서코드가 없으면 빈 DataFrame 반환
+        return pd.DataFrame()
     
     # 학교급명 추가
     if '학교급명' in order_df.columns:
@@ -98,8 +101,11 @@ def match_orders_with_student_data(order_df, total_df, year_offset=1):
             group_keys = (group_keys,)
         
         school_code = group_keys[0]
-        subject_name = group_keys[1] if len(group_keys) > 1 else '미상'
+        book_code = group_keys[1] if len(group_keys) > 1 else '미상'
         school_level = group_keys[2] if len(group_keys) > 2 else '미상'
+        
+        # 도서코드에 해당하는 과목명 가져오기
+        subject_name = group_data['교과서명_구분'].iloc[0] if '교과서명_구분' in group_data.columns and not group_data['교과서명_구분'].isna().all() else str(book_code)
         
         # 해당 학교의 학생수 데이터 찾기
         school_total = total_df[total_df.get('정보공시 학교코드', '') == str(school_code)]
@@ -145,6 +151,7 @@ def match_orders_with_student_data(order_df, total_df, year_offset=1):
         
         results.append({
             '학교코드': school_code,
+            '도서코드': book_code,
             '과목명': subject_name,
             '학교급': school_level,
             '주문부수': total_orders,
@@ -194,14 +201,17 @@ def calculate_market_size_by_subject_v2(order_df, total_df, product_df=None):
     if school_subject.empty:
         return pd.DataFrame()
     
-    # 과목별 집계
-    subject_summary = school_subject.groupby('과목명').agg({
+    # 도서코드별 집계 (과목명이 아닌 도서코드로!)
+    book_code_col = '도서코드' if '도서코드' in school_subject.columns else '과목명'
+    
+    subject_summary = school_subject.groupby(book_code_col).agg({
         '주문부수': 'sum',
         '시장규모': 'sum',
-        '학교코드': 'count'  # 학교 수
+        '학교코드': 'count',  # 학교 수
+        '과목명': 'first'  # 과목명 가져오기
     }).reset_index()
     
-    subject_summary.columns = ['과목명', '주문부수', '시장규모(학생수)', '학교수']
+    subject_summary.columns = ['도서코드', '주문부수', '시장규모(학생수)', '학교수', '과목명']
     
     # 점유율 계산
     subject_summary['점유율(%)'] = (
@@ -209,12 +219,12 @@ def calculate_market_size_by_subject_v2(order_df, total_df, product_df=None):
     ).fillna(0)
     
     # 대상 학년 정보 추가 (대표값)
-    grade_info = school_subject.groupby('과목명')['추정학년'].agg(
+    grade_info = school_subject.groupby(book_code_col)['추정학년'].agg(
         lambda x: f"{int(x.mode()[0])}학년" if len(x.mode()) > 0 and pd.notna(x.mode()[0]) else "가변"
     ).reset_index()
-    grade_info.columns = ['과목명', '대상학년']
+    grade_info.columns = ['도서코드', '대상학년']
     
-    subject_summary = pd.merge(subject_summary, grade_info, on='과목명', how='left')
+    subject_summary = pd.merge(subject_summary, grade_info, on='도서코드', how='left')
     
     # 정렬
     subject_summary = subject_summary.sort_values('주문부수', ascending=False)

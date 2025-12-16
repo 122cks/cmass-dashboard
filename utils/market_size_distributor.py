@@ -85,7 +85,7 @@ def calculate_distributor_market_size(total_df, order_df, distributor_df):
 
 def calculate_subject_market_by_distributor(total_df, order_df, product_df):
     """
-    총판별 + 과목별 시장 규모 계산
+    총판별 + 도서코드별 시장 규모 계산
     
     Args:
         total_df: 학생수 데이터 (담당총판 정보 포함)
@@ -93,7 +93,7 @@ def calculate_subject_market_by_distributor(total_df, order_df, product_df):
         product_df: 제품 정보
     
     Returns:
-        총판별 과목별 시장 규모 DataFrame
+        총판별 도서코드별 시장 규모 DataFrame
     """
     results = []
     
@@ -103,15 +103,15 @@ def calculate_subject_market_by_distributor(total_df, order_df, product_df):
     if dist_col not in total_df.columns or '총판' not in order_df.columns:
         return pd.DataFrame()
     
-    # 과목명 컬럼
-    subject_col = '교과서명_구분' if '교과서명_구분' in order_df.columns else '교과서명'
+    # 도서코드(교지명구분) 컬럼 확인
+    book_code_col = '도서코드(교지명구분)' if '도서코드(교지명구분)' in order_df.columns else '도서코드'
     
-    if subject_col not in order_df.columns:
+    if book_code_col not in order_df.columns:
         return pd.DataFrame()
     
-    # 총판별 + 과목별로 그룹화
-    for (dist_name, subject), group in order_df.groupby(['총판', subject_col], dropna=False):
-        if pd.isna(dist_name) or pd.isna(subject):
+    # 총판별 + 도서코드별로 그룹화 (과목명이 아닌 도서코드로!)
+    for (dist_name, book_code), group in order_df.groupby(['총판', book_code_col], dropna=False):
+        if pd.isna(dist_name) or pd.isna(book_code):
             continue
         
         # 해당 총판이 담당하는 학교들
@@ -120,19 +120,17 @@ def calculate_subject_market_by_distributor(total_df, order_df, product_df):
         if dist_schools.empty:
             continue
         
-        # 과목의 학교급 확인 (중등 vs 고등)
-        school_level = None
-        if '학교급' in group.columns:
-            # 가장 많은 주문이 발생한 학교급 사용
-            school_level = group['학교급'].mode()[0] if not group['학교급'].mode().empty else None
+        # 도서코드에 해당하는 과목명과 학교급 정보 가져오기
+        subject_name = group['교과서명_구분'].iloc[0] if '교과서명_구분' in group.columns and not group['교과서명_구분'].isna().all() else str(book_code)
+        school_level = group['학교급'].iloc[0] if '학교급' in group.columns and not group['학교급'].isna().all() else None
         
         # 시장 규모 계산
-        if school_level == '중학교' or '[중등]' in str(subject):
+        if school_level == '중학교' or '[중등]' in str(subject_name):
             # 중학교 1, 2학년 학생수
             middle_schools = dist_schools[dist_schools['학교급코드'] == 3]
             market_size = middle_schools['1학년 학생수'].sum() + middle_schools['2학년 학생수'].sum()
             school_level_text = '중등'
-        elif school_level == '고등학교' or '[고등]' in str(subject):
+        elif school_level == '고등학교' or '[고등]' in str(subject_name):
             # 고등학교 1, 2학년 학생수
             high_schools = dist_schools[dist_schools['학교급코드'] == 4]
             market_size = high_schools['1학년 학생수'].sum() + high_schools['2학년 학생수'].sum()
@@ -163,7 +161,8 @@ def calculate_subject_market_by_distributor(total_df, order_df, product_df):
         
         results.append({
             '총판명': dist_name,
-            '과목명': subject,
+            '도서코드': book_code,
+            '과목명': subject_name,
             '학교급': school_level_text,
             '시장규모': market_size,
             '주문부수': total_orders,
