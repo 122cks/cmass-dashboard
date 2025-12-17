@@ -635,7 +635,9 @@ with tab4:
         top_subjects_list = [s for s in top_subjects_list if s in pivot_data.columns]
         
         if top_subjects_list:
-            pivot_data_filtered = pivot_data[top_subjects_list]
+            # 중복 컬럼 제거 (unique 적용)
+            unique_subjects = list(dict.fromkeys(top_subjects_list))
+            pivot_data_filtered = pivot_data[unique_subjects].copy()
             
             fig_heatmap = px.imshow(
                 pivot_data_filtered,

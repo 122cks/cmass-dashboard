@@ -125,7 +125,7 @@ def show_grade_detail(grade):
                 color='총판수',
                 color_continuous_scale='Blues'
             )
-            fig.update_xaxis(tickangle=-45)
+            fig.update_layout(xaxis={'tickangle': -45})
             st.plotly_chart(fig, use_container_width=True)
             
             st.dataframe(

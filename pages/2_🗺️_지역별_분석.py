@@ -132,7 +132,7 @@ def show_region_detail(region_name):
                 color='학교수',
                 color_continuous_scale='Viridis'
             )
-            fig.update_xaxis(tickangle=-45)
+            fig.update_layout(xaxis={'tickangle': -45})
             st.plotly_chart(fig, use_container_width=True)
             
             st.dataframe(
