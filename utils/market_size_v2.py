@@ -59,15 +59,20 @@ def infer_subject_grade_for_school(order_quantity, grade_students):
 def match_orders_with_student_data(order_df, total_df, year_offset=1):
     """
     주문 데이터와 학생수 데이터를 학교별로 매칭하고, 
-    각 주문의 대상 학년을 추정하여 시장 규모 계산
+    학년도별 주문 패턴으로 배정 학년을 판단하여 시장 규모 계산
+    
+    비즈니스 로직:
+    - 2025년, 2026년 둘 다 주문 → 1학년 편성
+    - 2026년만 주문 → 2학년 편성
+    - 2025년만 주문 → 1학년 편성
     
     Args:
         order_df: 주문 데이터
         total_df: 학생수 데이터 (2025년 기준)
-        year_offset: 학년 오프셋 (1=내년 사용, 0=올해 사용)
+        year_offset: 학년 오프셋 (사용 안 함, 학년도 패턴으로 판단)
     
     Returns:
-        학교별 + 과목별 시장 규모 데이터프레임
+        학교별 + 도서코드별 시장 규모 데이터프레임
     """
     results = []
     
@@ -81,18 +86,33 @@ def match_orders_with_student_data(order_df, total_df, year_offset=1):
     if not school_code_col:
         return pd.DataFrame()
     
-    # 학교별 + 도서코드별로 그룹화 (과목명이 아닌 도서코드로!)
-    groupby_cols = [school_code_col]
-    
-    # 도서코드(교지명구분) 컬럼 - 이게 핵심!
+    # 도서코드별 학년도 패턴 분석 (전체 데이터에서)
     book_code_col = '도서코드(교지명구분)' if '도서코드(교지명구분)' in order_df.columns else '도서코드'
-    if book_code_col in order_df.columns:
-        groupby_cols.append(book_code_col)
-    else:
-        # 도서코드가 없으면 빈 DataFrame 반환
+    if book_code_col not in order_df.columns:
         return pd.DataFrame()
     
-    # 학교급명 추가
+    # 도서코드별로 학년도 주문 패턴 파악
+    book_grade_map = {}
+    if '학년도' in order_df.columns:
+        for book_code, book_group in order_df.groupby(book_code_col, dropna=False):
+            if pd.isna(book_code):
+                continue
+            years = book_group['학년도'].unique()
+            has_2025 = 2025 in years
+            has_2026 = 2026 in years
+            
+            # 배정 학년 결정
+            if has_2025 and has_2026:
+                book_grade_map[book_code] = (1, "2025+2026년 주문")
+            elif has_2026 and not has_2025:
+                book_grade_map[book_code] = (2, "2026년만 주문")
+            elif has_2025 and not has_2026:
+                book_grade_map[book_code] = (1, "2025년만 주문")
+            else:
+                book_grade_map[book_code] = (None, "학년도 정보 없음")
+    
+    # 학교별 + 도서코드별로 그룹화
+    groupby_cols = [school_code_col, book_code_col]
     if '학교급명' in order_df.columns:
         groupby_cols.append('학교급명')
     
@@ -127,24 +147,18 @@ def match_orders_with_student_data(order_df, total_df, year_offset=1):
         # 주문 부수 합계
         total_orders = group_data['부수'].sum()
         
-        # 해당 과목의 배정 학년 추정
-        assigned_grade = infer_subject_grade_for_school(total_orders, grade_students)
-        
-        # 2026년도 사용을 위한 학년 조정 (현재 1학년 → 내년 2학년)
-        if assigned_grade and year_offset > 0:
-            target_grade = assigned_grade + year_offset
-            if target_grade > 3:
-                target_grade = None  # 학년 범위 초과
-        elif assigned_grade:
-            target_grade = assigned_grade
+        # 도서코드별 배정 학년 가져오기
+        if book_code in book_grade_map:
+            target_grade, grade_logic = book_grade_map[book_code]
         else:
             target_grade = None
+            grade_logic = "학년도 정보 없음"
         
-        # 시장 규모 계산 (해당 학년 학생수)
+        # 시장 규모 계산 (배정 학년의 학생수만)
         if target_grade and target_grade in grade_students:
             market_size = grade_students[target_grade]
         elif not target_grade:
-            # 전체 학년 합계
+            # 학년 정보 없으면 전체 학년 합계
             market_size = sum(grade_students.values())
         else:
             market_size = sum(grade_students.values())
@@ -155,8 +169,8 @@ def match_orders_with_student_data(order_df, total_df, year_offset=1):
             '과목명': subject_name,
             '학교급': school_level,
             '주문부수': total_orders,
-            '추정학년': assigned_grade,
-            '목표학년': target_grade,
+            '배정학년': target_grade,
+            '배정로직': grade_logic,
             '시장규모': market_size,
             '1학년학생수': grade_students.get(1, 0),
             '2학년학생수': grade_students.get(2, 0),
@@ -170,7 +184,12 @@ def calculate_market_size_by_subject_v2(order_df, total_df, product_df=None):
     """
     과목별 시장 규모 및 점유율 계산 (개선 버전)
     
-    학교별로 과목 배정 학년을 추정하여 정확한 시장 규모 산출
+    학년도별 주문 패턴으로 배정 학년을 판단하여 정확한 시장 규모 산출
+    
+    비즈니스 로직:
+    - 2025년, 2026년 둘 다 주문 → 1학년 편성
+    - 2026년만 주문 → 2학년 편성
+    - 2025년만 주문 → 1학년 편성
     
     Args:
         order_df: 주문 데이터프레임
@@ -180,23 +199,8 @@ def calculate_market_size_by_subject_v2(order_df, total_df, product_df=None):
     Returns:
         과목별 시장 규모 및 점유율 데이터프레임
     """
-    # 학년도별로 분리 (2025, 2026)
-    year_col = '학년도' if '학년도' in order_df.columns else None
-    
-    if year_col and 2026 in order_df[year_col].unique():
-        # 2026년도 주문 (내년 사용 = 학년 +1)
-        order_2026 = order_df[order_df[year_col] == 2026]
-        school_subject_2026 = match_orders_with_student_data(order_2026, total_df, year_offset=1)
-        
-        # 2025년도 주문 (올해 사용 = 학년 +0)
-        order_2025 = order_df[order_df[year_col] == 2025]
-        school_subject_2025 = match_orders_with_student_data(order_2025, total_df, year_offset=0)
-        
-        # 합치기
-        school_subject = pd.concat([school_subject_2025, school_subject_2026], ignore_index=True)
-    else:
-        # 학년도 구분이 없으면 기본적으로 내년 사용으로 가정
-        school_subject = match_orders_with_student_data(order_df, total_df, year_offset=1)
+    # 학교별 데이터 매칭 (학년도 패턴으로 배정 학년 판단)
+    school_subject = match_orders_with_student_data(order_df, total_df, year_offset=0)
     
     if school_subject.empty:
         return pd.DataFrame()
@@ -208,10 +212,12 @@ def calculate_market_size_by_subject_v2(order_df, total_df, product_df=None):
         '주문부수': 'sum',
         '시장규모': 'sum',
         '학교코드': 'count',  # 학교 수
-        '과목명': 'first'  # 과목명 가져오기
+        '과목명': 'first',  # 과목명 가져오기
+        '배정학년': 'first',  # 배정 학년 가져오기
+        '배정로직': 'first'  # 배정 로직 가져오기
     }).reset_index()
     
-    subject_summary.columns = ['도서코드', '주문부수', '시장규모(학생수)', '학교수', '과목명']
+    subject_summary.columns = ['도서코드', '주문부수', '시장규모(학생수)', '학교수', '과목명', '대상학년', '배정로직']
     
     # 점유율 계산
     subject_summary['점유율(%)'] = (
@@ -221,10 +227,6 @@ def calculate_market_size_by_subject_v2(order_df, total_df, product_df=None):
     # 대상 학년 정보 추가 (대표값)
     grade_info = school_subject.groupby(book_code_col)['추정학년'].agg(
         lambda x: f"{int(x.mode()[0])}학년" if len(x.mode()) > 0 and pd.notna(x.mode()[0]) else "가변"
-    ).reset_index()
-    grade_info.columns = ['도서코드', '대상학년']
-    
-    subject_summary = pd.merge(subject_summary, grade_info, on='도서코드', how='left')
     
     # 정렬
     subject_summary = subject_summary.sort_values('주문부수', ascending=False)

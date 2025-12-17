@@ -124,62 +124,97 @@ def calculate_subject_market_by_distributor(total_df, order_df, product_df):
         subject_name = group['교과서명_구분'].iloc[0] if '교과서명_구분' in group.columns and not group['교과서명_구분'].isna().all() else str(book_code)
         school_level = group['학교급'].iloc[0] if '학교급' in group.columns and not group['학교급'].isna().all() else None
         
+        # 학년도별 주문 패턴 분석으로 배정 학년 판단
+        # 1. 2025년, 2026년 주문 여부 확인
+        has_2025 = False
+        has_2026 = False
+        if '학년도' in group.columns:
+            years = group['학년도'].unique()
+            has_2025 = 2025 in years
+            has_2026 = 2026 in years
+        
+        # 2. 배정 학년 결정
+        # - 2025년과 2026년 둘 다 주문 → 1학년 편성
+        # - 2026년만 주문 → 2학년 편성
+        # - 2025년만 주문 → 1학년 편성
+        if has_2025 and has_2026:
+            target_grade_num = 1  # 1학년 편성
+            grade_logic = "2025+2026년 주문"
+        elif has_2026 and not has_2025:
+            target_grade_num = 2  # 2학년 편성
+            grade_logic = "2026년만 주문"
+        elif has_2025 and not has_2026:
+            target_grade_num = 1  # 1학년 편성
+            grade_logic = "2025년만 주문"
+        else:
+            target_grade_num = None
+            grade_logic = "학년도 정보 없음"
+        
         # 주문 정보
         total_orders = group['부수'].sum()
         total_amount = group['금액'].sum() if '금액' in group.columns else 0
         
         # 학교 수
-        school_code_col = None
+        school_code_col_name = None
         for col in ['정보공시학교코드', '정보공시 학교코드', '학교코드']:
             if col in group.columns:
-                school_code_col = col
+                school_code_col_name = col
                 break
         
-        num_schools = group[school_code_col].nunique() if school_code_col else 0
+        num_schools = group[school_code_col_name].nunique() if school_code_col_name else 0
         
-        # 시장 규모 계산 (학교급별 1,2학년만 사용)
+        # 시장 규모 계산 (배정 학년의 학생수만 사용)
         if school_level == '중학교' or '[중등]' in str(subject_name):
-            # 중학교 1, 2학년 학생수만
+            # 중학교
             middle_schools = dist_schools[dist_schools['학교급코드'] == 3]
-            grade1 = middle_schools['1학년 학생수'].sum()
-            grade2 = middle_schools['2학년 학생수'].sum()
             
-            # 주문 부수와 학년별 학생수 비교하여 어느 학년용인지 추정
-            if abs(total_orders - grade1) < abs(total_orders - grade2):
-                # 1학년용 교재로 추정
-                market_size = grade1
+            if target_grade_num == 1:
+                market_size = middle_schools['1학년 학생수'].sum()
                 target_grade = '1학년'
-            else:
-                # 2학년용 교재로 추정
-                market_size = grade2
+            elif target_grade_num == 2:
+                market_size = middle_schools['2학년 학생수'].sum()
                 target_grade = '2학년'
+            else:
+                # 학년 정보 없으면 1,2학년 합계
+                market_size = middle_schools['1학년 학생수'].sum() + middle_schools['2학년 학생수'].sum()
+                target_grade = '1,2학년'
             
             school_level_text = '중등'
-        elif school_level == '고등학교' or '[고등]' in str(subject_name):
-            # 고등학교 1, 2학년 학생수만
-            high_schools = dist_schools[dist_schools['학교급코드'] == 4]
-            grade1 = high_schools['1학년 학생수'].sum()
-            grade2 = high_schools['2학년 학생수'].sum()
             
-            # 주문 부수와 학년별 학생수 비교하여 어느 학년용인지 추정
-            if abs(total_orders - grade1) < abs(total_orders - grade2):
-                # 1학년용 교재로 추정
-                market_size = grade1
+        elif school_level == '고등학교' or '[고등]' in str(subject_name):
+            # 고등학교
+            high_schools = dist_schools[dist_schools['학교급코드'] == 4]
+            
+            if target_grade_num == 1:
+                market_size = high_schools['1학년 학생수'].sum()
                 target_grade = '1학년'
-            else:
-                # 2학년용 교재로 추정
-                market_size = grade2
+            elif target_grade_num == 2:
+                market_size = high_schools['2학년 학생수'].sum()
                 target_grade = '2학년'
+            else:
+                # 학년 정보 없으면 1,2학년 합계
+                market_size = high_schools['1학년 학생수'].sum() + high_schools['2학년 학생수'].sum()
+                target_grade = '1,2학년'
             
             school_level_text = '고등'
+            
         else:
             # 학교급을 알 수 없는 경우 중등+고등 1,2학년 전체
             middle_schools = dist_schools[dist_schools['학교급코드'] == 3]
             high_schools = dist_schools[dist_schools['학교급코드'] == 4]
-            market_size = (middle_schools['1학년 학생수'].sum() + middle_schools['2학년 학생수'].sum() +
-                          high_schools['1학년 학생수'].sum() + high_schools['2학년 학생수'].sum())
+            
+            if target_grade_num == 1:
+                market_size = middle_schools['1학년 학생수'].sum() + high_schools['1학년 학생수'].sum()
+                target_grade = '1학년'
+            elif target_grade_num == 2:
+                market_size = middle_schools['2학년 학생수'].sum() + high_schools['2학년 학생수'].sum()
+                target_grade = '2학년'
+            else:
+                market_size = (middle_schools['1학년 학생수'].sum() + middle_schools['2학년 학생수'].sum() +
+                              high_schools['1학년 학생수'].sum() + high_schools['2학년 학생수'].sum())
+                target_grade = '1,2학년'
+            
             school_level_text = '전체'
-            target_grade = '1,2학년'
         
         # 점유율
         share_pct = (total_orders / market_size * 100) if market_size > 0 else 0
@@ -190,6 +225,7 @@ def calculate_subject_market_by_distributor(total_df, order_df, product_df):
             '과목명': subject_name,
             '학교급': school_level_text,
             '대상학년': target_grade,
+            '배정로직': grade_logic,
             '시장규모': market_size,
             '주문부수': total_orders,
             '주문금액': total_amount,
