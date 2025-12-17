@@ -384,7 +384,66 @@ if '총판' in filtered_order_df.columns:
             
             # 달성률 상세
             st.markdown("---")
-            st.subheader("📊 달성률 상세 현황")
+            st.subheader("📊 총판 간 달성률 비교")
+            
+            # 달성률 순위 추가
+            target_dists_sorted = target_dists.sort_values('달성률(%)', ascending=False).reset_index(drop=True)
+            target_dists_sorted['달성률순위'] = range(1, len(target_dists_sorted) + 1)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # 달성률 TOP 20 차트
+                fig_achievement = px.bar(
+                    target_dists_sorted.head(20),
+                    x='총판',
+                    y='달성률(%)',
+                    title="총판별 목표 달성률 비교 TOP 20",
+                    text='달성률(%)',
+                    color='달성률(%)',
+                    color_continuous_scale='RdYlGn',
+                    range_color=[0, 200]
+                )
+                fig_achievement.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                fig_achievement.update_layout(xaxis_tickangle=-45, height=500)
+                fig_achievement.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="목표선 (100%)")
+                st.plotly_chart(fig_achievement, use_container_width=True)
+            
+            with col2:
+                # 달성률 vs 주문부수 산점도
+                fig_scatter = px.scatter(
+                    target_dists_sorted,
+                    x='주문부수',
+                    y='달성률(%)',
+                    size='목표부수',
+                    color='달성률(%)',
+                    hover_data=['총판', '목표부수'],
+                    title="달성률 vs 주문규모",
+                    labels={'주문부수': '실적 부수', '달성률(%)': '달성률 (%)'},
+                    color_continuous_scale='RdYlGn',
+                    range_color=[0, 200]
+                )
+                fig_scatter.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="목표선")
+                fig_scatter.update_layout(height=500)
+                st.plotly_chart(fig_scatter, use_container_width=True)
+            
+            # 순위 테이블
+            st.markdown("---")
+            st.subheader("🏆 달성률 순위 TOP 20")
+            
+            display_cols = ['달성률순위', '총판', '목표부수', '주문부수', '달성률(%)', '판매비중(%)']
+            st.dataframe(
+                target_dists_sorted[display_cols].head(20).style.format({
+                    '목표부수': '{:,.0f}',
+                    '주문부수': '{:,.0f}',
+                    '달성률(%)': '{:.1f}',
+                    '판매비중(%)': '{:.2f}'
+                }).background_gradient(subset=['달성률(%)'], cmap='RdYlGn', vmin=0, vmax=200),
+                use_container_width=True,
+                height=500
+            )
+            
+            st.markdown("---")
             
             col1, col2 = st.columns(2)
             

@@ -158,46 +158,55 @@ with tab1:
             stats['등급'] = '-'
         
         # Get target from target_df and calculate achievement by target subject
-        if not target_df.empty and '총판명' in target_df.columns:
+        if not target_df.empty and '총판명(공식)' in target_df.columns:
             # Try matching with official name
-            target_info = target_df[target_df['총판명'] == dist]
+            target_info = target_df[target_df['총판명(공식)'] == dist]
             if target_info.empty:
                 # Try partial match
                 dist_name = dist.split(')')[-1] if ')' in dist else dist
-                target_info = target_df[target_df['총판명'].str.contains(dist_name, na=False)]
+                target_info = target_df[target_df['총판명(공식)'].str.contains(dist_name, na=False)]
             
             if not target_info.empty:
                 target_row = target_info.iloc[0]
+                
+                # 목표과목1 부수
+                target1_str = str(target_row.get('목표과목1 부수', '0'))
+                target1 = pd.to_numeric(target1_str.replace(',', '').strip(), errors='coerce')
+                if pd.isna(target1):
+                    target1 = 0
+                
+                # 목표과목2 부수
+                target2_str = str(target_row.get('목표과목2 부수', '0'))
+                target2 = pd.to_numeric(target2_str.replace(',', '').strip(), errors='coerce')
+                if pd.isna(target2):
+                    target2 = 0
+                
+                # 전체 목표 = 목표과목1 + 목표과목2
+                stats['목표부수'] = target1 + target2
                 
                 # Calculate actual orders by target subject (목표과목1, 목표과목2)
                 if '2026 목표과목' in dist_data.columns:
                     # 목표과목1 달성률
                     subject1_orders = dist_data[dist_data['2026 목표과목'] == '목표과목1']['부수'].sum()
-                    target1_str = str(target_row.get('목표과목1 부수', '0'))
-                    target1 = pd.to_numeric(target1_str.replace(',', '').strip(), errors='coerce')
                     stats['목표과목1_주문'] = subject1_orders
-                    stats['목표과목1_목표'] = target1 if pd.notna(target1) else 0
-                    stats['목표과목1_달성률'] = (subject1_orders / target1 * 100) if target1 and target1 > 0 else 0
+                    stats['목표과목1_목표'] = target1
+                    stats['목표과목1_달성률'] = (subject1_orders / target1 * 100) if target1 > 0 else 0
                     
                     # 목표과목2 달성률
                     subject2_orders = dist_data[dist_data['2026 목표과목'] == '목표과목2']['부수'].sum()
-                    target2_str = str(target_row.get('목표과목2 부수', '0'))
-                    target2 = pd.to_numeric(target2_str.replace(',', '').strip(), errors='coerce')
                     stats['목표과목2_주문'] = subject2_orders
-                    stats['목표과목2_목표'] = target2 if pd.notna(target2) else 0
-                    stats['목표과목2_달성률'] = (subject2_orders / target2 * 100) if target2 and target2 > 0 else 0
+                    stats['목표과목2_목표'] = target2
+                    stats['목표과목2_달성률'] = (subject2_orders / target2 * 100) if target2 > 0 else 0
                 else:
                     stats['목표과목1_주문'] = 0
-                    stats['목표과목1_목표'] = 0
+                    stats['목표과목1_목표'] = target1
                     stats['목표과목1_달성률'] = 0
                     stats['목표과목2_주문'] = 0
-                    stats['목표과목2_목표'] = 0
+                    stats['목표과목2_목표'] = target2
                     stats['목표과목2_달성률'] = 0
                 
                 # 전체 목표달성률
-                target_str = str(target_row.get('전체목표 부수', '0'))
-                stats['목표부수'] = pd.to_numeric(target_str.replace(',', '').strip(), errors='coerce')
-                if pd.notna(stats['목표부수']) and stats['목표부수'] > 0:
+                if stats['목표부수'] > 0:
                     stats['목표달성률'] = (stats['주문부수'] / stats['목표부수']) * 100
                 else:
                     stats['목표달성률'] = 0
@@ -334,20 +343,147 @@ with tab1:
         )
 
 with tab2:
-    st.subheader("📈 목표 대비 실적 분석")
+    st.subheader("📈 총판 간 목표 달성률 비교")
     
     if not target_df.empty:
         # Goal achievement comparison
         goal_data = comparison_df[comparison_df['목표부수'] > 0].copy()
         
         if not goal_data.empty:
+            st.info("💡 선택한 총판들의 목표 대비 달성률을 비교합니다. (목표과목1 + 목표과목2 = 전체 목표)")
+            
             col1, col2 = st.columns(2)
             
             with col1:
-                # Achievement rate bar chart
-                fig = px.bar(
+                # 전체 목표 달성률 비교
+                fig_achievement = px.bar(
                     goal_data,
                     x='총판',
+                    y='목표달성률',
+                    title="총판별 전체 목표 달성률 비교",
+                    text='목표달성률',
+                    color='목표달성률',
+                    color_continuous_scale='RdYlGn',
+                    range_color=[0, 200]
+                )
+                fig_achievement.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                fig_achievement.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="목표선 (100%)")
+                fig_achievement.update_layout(xaxis_tickangle=-45, height=500, yaxis_title="달성률 (%)")
+                st.plotly_chart(fig_achievement, use_container_width=True)
+            
+            with col2:
+                # 목표 vs 실적 비교
+                fig_target = go.Figure()
+                
+                fig_target.add_trace(go.Bar(
+                    name='목표',
+                    x=goal_data['총판'],
+                    y=goal_data['목표부수'],
+                    marker_color='lightblue',
+                    text=goal_data['목표부수'],
+                    texttemplate='%{text:,.0f}',
+                    textposition='outside'
+                ))
+                
+                fig_target.add_trace(go.Bar(
+                    name='실적',
+                    x=goal_data['총판'],
+                    y=goal_data['주문부수'],
+                    marker_color='darkblue',
+                    text=goal_data['주문부수'],
+                    texttemplate='%{text:,.0f}',
+                    textposition='outside'
+                ))
+                
+                fig_target.update_layout(
+                    title="목표 vs 실적 비교",
+                    barmode='group',
+                    xaxis_tickangle=-45,
+                    height=500,
+                    yaxis_title="부수"
+                )
+                st.plotly_chart(fig_target, use_container_width=True)
+            
+            # 목표과목별 달성률 비교
+            st.markdown("---")
+            st.subheader("📚 목표과목별 달성률 상세 비교")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # 목표과목1 달성률
+                goal_subject1 = goal_data[goal_data['목표과목1_목표'] > 0]
+                if len(goal_subject1) > 0:
+                    fig1 = px.bar(
+                        goal_subject1,
+                        x='총판',
+                        y='목표과목1_달성률',
+                        title="목표과목1 달성률 비교",
+                        text='목표과목1_달성률',
+                        color='목표과목1_달성률',
+                        color_continuous_scale='Blues'
+                    )
+                    fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                    fig1.add_hline(y=100, line_dash="dash", line_color="red")
+                    fig1.update_layout(xaxis_tickangle=-45, yaxis_title="달성률 (%)")
+                    st.plotly_chart(fig1, use_container_width=True)
+                else:
+                    st.info("목표과목1 데이터가 없습니다.")
+            
+            with col2:
+                # 목표과목2 달성률
+                goal_subject2 = goal_data[goal_data['목표과목2_목표'] > 0]
+                if len(goal_subject2) > 0:
+                    fig2 = px.bar(
+                        goal_subject2,
+                        x='총판',
+                        y='목표과목2_달성률',
+                        title="목표과목2 달성률 비교",
+                        text='목표과목2_달성률',
+                        color='목표과목2_달성률',
+                        color_continuous_scale='Greens'
+                    )
+                    fig2.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                    fig2.add_hline(y=100, line_dash="dash", line_color="red")
+                    fig2.update_layout(xaxis_tickangle=-45, yaxis_title="달성률 (%)")
+                    st.plotly_chart(fig2, use_container_width=True)
+                else:
+                    st.info("목표과목2 데이터가 없습니다.")
+            
+            # 달성률 상세 테이블
+            st.markdown("---")
+            st.subheader("📊 달성률 상세 데이터")
+            
+            detail_cols = ['총판', '등급', '목표부수', '주문부수', '목표달성률']
+            if goal_data['목표과목1_목표'].sum() > 0:
+                detail_cols.extend(['목표과목1_목표', '목표과목1_주문', '목표과목1_달성률'])
+            if goal_data['목표과목2_목표'].sum() > 0:
+                detail_cols.extend(['목표과목2_목표', '목표과목2_주문', '목표과목2_달성률'])
+            
+            format_dict = {
+                '목표부수': '{:,.0f}',
+                '주문부수': '{:,.0f}',
+                '목표달성률': '{:.1f}',
+                '목표과목1_목표': '{:,.0f}',
+                '목표과목1_주문': '{:,.0f}',
+                '목표과목1_달성률': '{:.1f}',
+                '목표과목2_목표': '{:,.0f}',
+                '목표과목2_주문': '{:,.0f}',
+                '목표과목2_달성률': '{:.1f}'
+            }
+            
+            st.dataframe(
+                goal_data[detail_cols].style.format(format_dict).background_gradient(
+                    subset=['목표달성률'], cmap='RdYlGn', vmin=0, vmax=200
+                ),
+                use_container_width=True
+            )
+        else:
+            st.warning("선택한 총판 중 목표 데이터가 있는 총판이 없습니다.")
+    else:
+        st.warning("목표 데이터가 없습니다.")
+
+with tab3:
                     y='목표달성률',
                     title="총판별 목표 달성률 (%)",
                     text='목표달성률',
