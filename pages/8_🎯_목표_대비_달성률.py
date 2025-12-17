@@ -42,13 +42,18 @@ else:
     target_summary['목표1'] = target_summary['전체목표'] * 0.5
     target_summary['목표2'] = target_summary['전체목표'] * 0.5
 
-# 총판별 실적 집계
+# 총판별 실적 집계 - 2026년도만
+st.info("💡 목표는 2026년도 기준이므로, 2026년도 주문만 집계하여 달성률을 계산합니다.")
+
 school_code_col = '정보공시학교코드' if '정보공시학교코드' in order_df.columns else '학교코드'
 
-actual_stats = order_df.groupby('총판').agg({
+# 2026년도 주문만 필터링
+order_2026 = order_df[order_df['학년도'] == 2026] if '학년도' in order_df.columns else order_df
+
+actual_stats = order_2026.groupby('총판').agg({
     '부수': 'sum',
     school_code_col: 'nunique',
-    '금액': 'sum' if '금액' in order_df.columns else 'count'
+    '금액': 'sum' if '금액' in order_2026.columns else 'count'
 }).reset_index()
 actual_stats.columns = ['총판', '실적부수', '거래학교수', '주문금액']
 
@@ -78,7 +83,8 @@ achievement_df['차이'] = achievement_df['실적부수'] - achievement_df['전�
 
 # 등급 정보 추가
 if not distributor_df.empty and '총판명(공식)' in distributor_df.columns and '등급' in distributor_df.columns:
-    grade_map = distributor_df.set_index('총판명(공식)')['등급'].to_dict()
+    # 중복 제거하여 매핑
+    grade_map = distributor_df.drop_duplicates(subset='총판명(공식)').set_index('총판명(공식)')['등급'].to_dict()
     achievement_df['등급'] = achievement_df['총판'].map(grade_map).fillna('미분류')
 else:
     achievement_df['등급'] = '미분류'
@@ -235,7 +241,7 @@ with tab1:
             values='총판수',
             names='달성구간',
             title="달성률 구간별 총판 분포",
-            color_discrete_sequence=px.colors.sequential.RdYlGn
+            color_discrete_sequence=px.colors.diverging.RdYlGn
         )
         st.plotly_chart(fig_pie, use_container_width=True)
 
@@ -365,9 +371,10 @@ with tab4:
             '차이': '{:,.0f}',
             '거래학교수': '{:,.0f}',
             '주문금액': '{:,.0f}'
-        }).applymap(
-            lambda x: 'color: green' if isinstance(x, (int, float)) and x >= 100 else ('color: red' if isinstance(x, (int, float)) and 0 <= x < 100 else ''),
-            subset=['전체달성률(%)']
+        }).apply(
+            lambda x: ['color: green' if isinstance(v, (int, float)) and v >= 100 else ('color: red' if isinstance(v, (int, float)) and 0 <= v < 100 else '') for v in x],
+            subset=['전체달성률(%)'],
+            axis=0
         ),
         use_container_width=True,
         height=600

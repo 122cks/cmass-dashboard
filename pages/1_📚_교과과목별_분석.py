@@ -82,12 +82,20 @@ def show_subject_detail(subject_name, book_code):
     
     with detail_tab1:
         st.subheader("학교별 주문 현황")
-        school_orders = subject_orders.groupby('학교명').agg({
-            '부수': 'sum',
-            '금액': 'sum' if '금액' in subject_orders.columns else 'count',
-            '시도': 'first' if '시도' in subject_orders.columns else 'count'
-        }).reset_index()
-        school_orders.columns = ['학교명', '주문부수', '주문금액', '지역']
+        
+        agg_dict = {'부수': 'sum'}
+        col_names = ['학교명', '주문부수']
+        
+        if '금액' in subject_orders.columns:
+            agg_dict['금액'] = 'sum'
+            col_names.append('주문금액')
+        
+        if '시도' in subject_orders.columns:
+            agg_dict['시도'] = 'first'
+            col_names.append('지역')
+        
+        school_orders = subject_orders.groupby('학교명').agg(agg_dict).reset_index()
+        school_orders.columns = col_names
         school_orders = school_orders.sort_values('주문부수', ascending=False)
         
         # 차트

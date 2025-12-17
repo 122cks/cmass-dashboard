@@ -107,6 +107,9 @@ with tab1:
     for dist in selected_distributors:
         dist_data = filtered_order[filtered_order['총판'] == dist]
         
+        # 2026년도 주문만 필터링 (목표 달성률 계산용)
+        dist_data_2026 = dist_data[dist_data['학년도'] == 2026] if '학년도' in dist_data.columns else dist_data
+        
         # Determine school code column
         school_code_col = '정보공시학교코드' if '정보공시학교코드' in dist_data.columns else '학교코드'
         subject_col = '교과서명_구분' if '교과서명_구분' in dist_data.columns else '교과서명'
@@ -184,19 +187,22 @@ with tab1:
                 # 전체 목표 = 목표과목1 + 목표과목2
                 stats['목표부수'] = target1 + target2
                 
-                # Calculate actual orders by target subject (목표과목1, 목표과목2)
-                if '2026 목표과목' in dist_data.columns:
-                    # 목표과목1 달성률
-                    subject1_orders = dist_data[dist_data['2026 목표과목'] == '목표과목1']['부수'].sum()
+                # Calculate actual orders by target subject (목표과목1, 목표과목2) - 2026년도만
+                if '2026 목표과목' in dist_data_2026.columns:
+                    # 목표과목1 달성률 (2026년도)
+                    subject1_orders = dist_data_2026[dist_data_2026['2026 목표과목'] == '목표과목1']['부수'].sum()
                     stats['목표과목1_주문'] = subject1_orders
                     stats['목표과목1_목표'] = target1
                     stats['목표과목1_달성률'] = (subject1_orders / target1 * 100) if target1 > 0 else 0
                     
-                    # 목표과목2 달성률
-                    subject2_orders = dist_data[dist_data['2026 목표과목'] == '목표과목2']['부수'].sum()
+                    # 목표과목2 달성률 (2026년도)
+                    subject2_orders = dist_data_2026[dist_data_2026['2026 목표과목'] == '목표과목2']['부수'].sum()
                     stats['목표과목2_주문'] = subject2_orders
                     stats['목표과목2_목표'] = target2
                     stats['목표과목2_달성률'] = (subject2_orders / target2 * 100) if target2 > 0 else 0
+                    
+                    # 전체 실적 (2026년도)
+                    stats['실적2026'] = subject1_orders + subject2_orders
                 else:
                     stats['목표과목1_주문'] = 0
                     stats['목표과목1_목표'] = target1
@@ -204,10 +210,11 @@ with tab1:
                     stats['목표과목2_주문'] = 0
                     stats['목표과목2_목표'] = target2
                     stats['목표과목2_달성률'] = 0
+                    stats['실적2026'] = dist_data_2026['부수'].sum()
                 
-                # 전체 목표달성률
+                # 전체 목표달성률 (2026년도 실적 사용)
                 if stats['목표부수'] > 0:
-                    stats['목표달성률'] = (stats['주문부수'] / stats['목표부수']) * 100
+                    stats['목표달성률'] = (stats['실적2026'] / stats['목표부수']) * 100
                 else:
                     stats['목표달성률'] = 0
             else:
@@ -482,60 +489,6 @@ with tab2:
             st.warning("선택한 총판 중 목표 데이터가 있는 총판이 없습니다.")
     else:
         st.warning("목표 데이터가 없습니다.")
-
-with tab3:
-                    y='목표달성률',
-                    title="총판별 목표 달성률 (%)",
-                    text='목표달성률',
-                    color='목표달성률',
-                    color_continuous_scale='RdYlGn'
-                )
-                fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-                fig.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="목표")
-                st.plotly_chart(fig, use_container_width=True)
-            
-            with col2:
-                # Goal vs Actual
-                fig2 = go.Figure()
-                fig2.add_trace(go.Bar(
-                    name='목표',
-                    x=goal_data['총판'],
-                    y=goal_data['목표부수'],
-                    text=goal_data['목표부수'],
-                    texttemplate='%{text:,.0f}'
-                ))
-                fig2.add_trace(go.Bar(
-                    name='실적',
-                    x=goal_data['총판'],
-                    y=goal_data['주문부수'],
-                    text=goal_data['주문부수'],
-                    texttemplate='%{text:,.0f}'
-                ))
-                fig2.update_layout(title="목표 vs 실적 비교", barmode='group')
-                st.plotly_chart(fig2, use_container_width=True)
-            
-            # Gap analysis
-            st.markdown("---")
-            st.subheader("📊 목표 대비 차이 분석")
-            
-            goal_data['차이'] = goal_data['주문부수'] - goal_data['목표부수']
-            
-            fig3 = px.bar(
-                goal_data,
-                x='총판',
-                y='차이',
-                title="목표 대비 실적 차이",
-                text='차이',
-                color='차이',
-                color_continuous_scale='RdYlGn'
-            )
-            fig3.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-            fig3.add_hline(y=0, line_dash="solid", line_color="black")
-            st.plotly_chart(fig3, use_container_width=True)
-        else:
-            st.info("목표 데이터가 설정된 총판이 없습니다.")
-    else:
-        st.info("목표 데이터가 없습니다.")
 
 with tab3:
     st.subheader("🗺️ 지역별 활동 비교")

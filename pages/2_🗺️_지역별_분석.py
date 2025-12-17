@@ -290,26 +290,44 @@ with tab1:
         region_students = filtered_total_df.groupby('시도교육청')['학생수(계)'].sum().reset_index()
         region_students.columns = ['시도교육청', '전체학생수']
         
+        # 지역별 전체 학교 수 계산
+        region_schools_total = filtered_total_df.groupby('시도교육청')['정보공시 학교코드'].nunique().reset_index()
+        region_schools_total.columns = ['시도교육청', '전체학교수']
+        
         region_orders = filtered_order_df.groupby('시도교육청')['부수'].sum().reset_index()
         region_orders.columns = ['시도교육청', '주문부수']
         
-        region_stats = pd.merge(region_students, region_orders, on='시도교육청', how='left').fillna(0)
+        # 지역별 채택 학교 수 계산
+        school_code_col = '정보공시학교코드' if '정보공시학교코드' in filtered_order_df.columns else '학교코드'
+        region_schools_adopted = filtered_order_df.groupby('시도교육청')[school_code_col].nunique().reset_index()
+        region_schools_adopted.columns = ['시도교육청', '채택학교수']
+        
+        # 모든 통계 병합
+        region_stats = pd.merge(region_students, region_schools_total, on='시도교육청', how='left')
+        region_stats = pd.merge(region_stats, region_orders, on='시도교육청', how='left')
+        region_stats = pd.merge(region_stats, region_schools_adopted, on='시도교육청', how='left')
+        region_stats = region_stats.fillna(0)
+        
+        # 계산
         region_stats['점유율(%)'] = (region_stats['주문부수'] / region_stats['전체학생수']) * 100
+        region_stats['학교채택률(%)'] = (region_stats['채택학교수'] / region_stats['전체학교수']) * 100
         region_stats['미점유학생'] = region_stats['전체학생수'] - region_stats['주문부수']
+        region_stats['미채택학교'] = region_stats['전체학교수'] - region_stats['채택학교수']
         region_stats = region_stats.sort_values('점유율(%)', ascending=False)
         
         # 지역 클릭 안내
-        st.info("💡 **아래 테이블에서 지역을 클릭**하면 해당 지역의 상세 정보를 확인할 수 있습니다.")
+        st.info("💡 **아래 차트와 테이블**에서 지역별 학생 점유율과 학교 채택률을 함께 확인할 수 있습니다.")
         
-        col1, col2 = st.columns(2)
+        # 3열 차트로 변경
+        col1, col2, col3 = st.columns(3)
         
         with col1:
-            # Bar chart
+            # Bar chart - 학생 점유율
             fig = px.bar(
                 region_stats,
                 x='시도교육청',
                 y='점유율(%)',
-                title="시도별 점유율",
+                title="시도별 학생 점유율",
                 text='점유율(%)',
                 color='점유율(%)',
                 color_continuous_scale='RdYlGn'
@@ -319,6 +337,21 @@ with tab1:
             st.plotly_chart(fig, use_container_width=True)
         
         with col2:
+            # Bar chart - 학교 채택률
+            fig2 = px.bar(
+                region_stats,
+                x='시도교육청',
+                y='학교채택률(%)',
+                title="시도별 학교 채택률",
+                text='학교채택률(%)',
+                color='학교채택률(%)',
+                color_continuous_scale='Blues'
+            )
+            fig2.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig2.update_layout(height=500, xaxis_tickangle=-45)
+            st.plotly_chart(fig2, use_container_width=True)
+        
+        with col3:
             # Calculate relative share (전체 대비 상대적 비중)
             region_stats['상대비중(%)'] = (region_stats['주문부수'] / region_stats['주문부수'].sum()) * 100
             
@@ -329,7 +362,7 @@ with tab1:
                 y=region_stats['상대비중(%)'],
                 text=region_stats['상대비중(%)'].apply(lambda x: f'{x:.1f}%'),
                 textposition='auto',
-                marker_color='lightblue',
+                marker_color='lightcoral',
                 name='상대 비중'
             ))
             fig_relative.update_layout(
@@ -342,27 +375,30 @@ with tab1:
             st.plotly_chart(fig_relative, use_container_width=True)
         
         # 클릭 가능한 지역 테이블
-        st.markdown("### 📋 지역별 상세 데이터 (클릭하여 상세보기)")
+        st.markdown("### 📋 지역별 종합 데이터 (클릭하여 상세보기)")
         
         # Display top regions with click buttons
         for idx, row in region_stats.head(20).iterrows():
-            col_btn, col_name, col_orders, col_schools, col_share, col_students = st.columns([1, 3, 2, 2, 2, 2])
+            cols = st.columns([1, 3, 2, 2, 2, 2, 2, 2])
             
-            with col_btn:
+            with cols[0]:
                 if st.button("📍", key=f"region_btn_{idx}", help="상세 정보 보기"):
                     show_region_detail(row['시도교육청'])
             
-            with col_name:
+            with cols[1]:
                 st.write(f"**{row['시도교육청']}**")
-            with col_orders:
+            with cols[2]:
                 st.write(f"{row['주문부수']:,.0f}부")
-            with col_schools:
-                schools_val = row.get('학교수', row.get('거래학교수', 0))
-                st.write(f"{schools_val:,.0f}개교")
-            with col_share:
+            with cols[3]:
                 st.write(f"{row['점유율(%)']:.1f}%")
-            with col_students:
+            with cols[4]:
+                st.write(f"{row['채택학교수']:,.0f}/{row['전체학교수']:,.0f}개교")
+            with cols[5]:
+                st.write(f"{row['학교채택률(%)']:.1f}%")
+            with cols[6]:
                 st.write(f"{row['전체학생수']:,.0f}명")
+            with cols[7]:
+                st.write(f"{row['상대비중(%)']:.1f}%")
         
         # Detailed comparison
         st.markdown("---")

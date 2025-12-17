@@ -340,15 +340,22 @@ with tab2:
             # 해당 등급의 총판 데이터
             grade_data = filtered_order[filtered_order['등급'] == grade]
             
+            # 2026년도 주문만 필터링 (목표 달성률 계산용)
+            grade_data_2026 = grade_data[grade_data['학년도'] == 2026] if '학년도' in grade_data.columns else grade_data
+            
             school_code_col = '정보공시학교코드' if '정보공시학교코드' in grade_data.columns else '학교코드'
             
-            # 총판별 집계
+            # 총판별 집계 (전체)
             dist_in_grade = grade_data.groupby('총판').agg({
                 '부수': 'sum',
                 school_code_col: 'nunique',
                 '금액': 'sum' if '금액' in grade_data.columns else 'count'
             }).reset_index()
             dist_in_grade.columns = ['총판', '주문부수', '학교수', '주문금액']
+            
+            # 2026년도 실적 집계
+            dist_2026_actual = grade_data_2026.groupby('총판')['부수'].sum().to_dict()
+            dist_in_grade['실적2026'] = dist_in_grade['총판'].map(dist_2026_actual).fillna(0)
             
             # 등급 내 점유율 계산
             total_in_grade = dist_in_grade['주문부수'].sum()
@@ -371,7 +378,7 @@ with tab2:
                 
                 target_map = target_summary.groupby('총판명(공식)')['전체목표'].sum().to_dict()
                 dist_in_grade['목표부수'] = dist_in_grade['총판'].map(target_map).fillna(0)
-                dist_in_grade['달성률(%)'] = (dist_in_grade['주문부수'] / dist_in_grade['목표부수'] * 100).replace([float('inf'), -float('inf')], 0).fillna(0)
+                dist_in_grade['달성률(%)'] = (dist_in_grade['실적2026'] / dist_in_grade['목표부수'] * 100).replace([float('inf'), -float('inf')], 0).fillna(0)
                 
                 # 순위 계산 (달성률 기준)
                 dist_in_grade = dist_in_grade.sort_values('달성률(%)', ascending=False)
@@ -439,81 +446,6 @@ with tab2:
                 }),
                 use_container_width=True
             )
-
-with tab3:
-        fig2 = px.bar(
-            grade_df,
-            x='등급',
-            y='학교당평균',
-            title="등급별 학교당 평균 주문",
-            text='학교당평균',
-            color='등급',
-            color_discrete_map={'S': '#FFD700', 'A': '#C0C0C0', 'B': '#CD7F32', 'C': '#4CAF50', '미분류': '#9E9E9E'}
-        )
-        fig2.update_traces(texttemplate='%{text:,.1f}', textposition='outside')
-        st.plotly_chart(fig2, use_container_width=True)
-    
-    # Multi-dimensional comparison
-    st.markdown("---")
-    st.subheader("🔄 다차원 성과 비교")
-    
-    # Radar chart
-    metrics = ['주문부수', '거래학교수', '취급과목수', '총판당평균', '학교당평균']
-    normalized_data = grade_df[metrics].copy()
-    for col in metrics:
-        max_val = normalized_data[col].max()
-        normalized_data[col] = (normalized_data[col] / max_val) * 100 if max_val > 0 else 0
-    
-    fig_radar = go.Figure()
-    color_map = {'S': '#FFD700', 'A': '#C0C0C0', 'B': '#CD7F32', 'C': '#4CAF50', '미분류': '#9E9E9E'}
-    
-    for idx, row in grade_df.iterrows():
-        values = normalized_data.iloc[idx].tolist()  # type: ignore
-        values.append(values[0])
-        
-        fig_radar.add_trace(go.Scatterpolar(
-            r=values,
-            theta=metrics + [metrics[0]],
-            name=row['등급'],
-            fill='toself',
-            line_color=color_map.get(row['등급'], '#4CAF50')
-        ))
-    
-    fig_radar.update_layout(
-        polar=dict(radialaxis=dict(visible=True, range=[0, 100])),
-        title="등급별 다차원 성과 비교 (정규화)"
-    )
-    st.plotly_chart(fig_radar, use_container_width=True)
-    
-    # Individual distributor performance within grades
-    st.markdown("---")
-    st.subheader("🏢 등급 내 총판별 성과")
-    
-    selected_grade = st.selectbox("상세 조회할 등급 선택", selected_grades)
-    
-    school_code_col = '정보공시학교코드' if '정보공시학교코드' in filtered_order.columns else '학교코드'
-    
-    grade_distributors = filtered_order[filtered_order['등급'] == selected_grade].groupby('총판').agg({
-        '부수': 'sum',
-        school_code_col: 'nunique',
-        '과목명': 'nunique'
-    }).reset_index()
-    grade_distributors.columns = ['총판', '주문부수', '거래학교수', '취급과목수']
-    grade_distributors['학교당평균'] = grade_distributors['주문부수'] / grade_distributors['거래학교수']
-    grade_distributors = grade_distributors.sort_values('주문부수', ascending=False)
-    
-    fig_dist = px.bar(
-        grade_distributors,
-        x='총판',
-        y='주문부수',
-        title=f"{selected_grade}등급 총판별 주문량",
-        text='주문부수',
-        color='주문부수',
-        color_continuous_scale='Blues'
-    )
-    fig_dist.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-    fig_dist.update_layout(xaxis_tickangle=-45)
-    st.plotly_chart(fig_dist, use_container_width=True)
 
 with tab3:
     st.subheader("🗺️ 등급별 지역 분포")
