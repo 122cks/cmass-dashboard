@@ -25,21 +25,25 @@ def apply_common_filters(order_df, show_filters=None):
     
     filtered_df = order_df.copy()
     
-    # 0. 학년도 필터 (2026년도 기본값)
+    # 0. 학년도 필터 (2026년도 기본값, 전체 옵션 추가)
     if '학년도' in show_filters and '학년도' in order_df.columns:
         years = sorted(order_df['학년도'].dropna().unique().tolist(), reverse=True)
+        # "전체" 옵션 추가 (2025+2026 합쳐서 보기)
+        year_options = ['전체(2025+2026)'] + years
         # 2026년도가 있으면 기본값으로, 없으면 최신 학년도
         default_year = 2026 if 2026 in years else (years[0] if years else None)
-        default_index = years.index(default_year) if default_year in years else 0
+        default_index = year_options.index(default_year) if default_year in year_options else 0
         
         selected_year = st.sidebar.selectbox(
             "📅 학년도 선택", 
-            years, 
+            year_options, 
             index=default_index,
             key='common_filter_year'
         )
         
-        filtered_df = filtered_df[filtered_df['학년도'] == selected_year]
+        # 전체 선택 시 필터링 안함
+        if selected_year != '전체(2025+2026)':
+            filtered_df = filtered_df[filtered_df['학년도'] == selected_year]
         
         # 학년도별 비교 옵션
         if len(years) > 1:

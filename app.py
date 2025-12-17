@@ -148,13 +148,13 @@ def load_data():
         # Add school level to subject name for clarity (중등 정보 vs 고등 정보)
         def add_school_level_to_subject(row):
             if pd.notna(row.get('학교급')) and pd.notna(row.get('교과서명')):
-                school_level = row['학교급']
+                school_level = str(row['학교급'])
                 subject = str(row['교과서명'])
-                # Add prefix based on school level
-                if school_level == '중학교':
-                    return f"[중등] {subject}"
-                elif school_level == '고등학교':
-                    return f"[고등] {subject}"
+                # 학교급에서 중등/고등 추출
+                if '중학교' in school_level:
+                    return f'[중등] {subject}'
+                elif '고등학교' in school_level:
+                    return f'[고등] {subject}'
             return row.get('교과서명', '')
 
         order_df['교과서명_구분'] = order_df.apply(add_school_level_to_subject, axis=1)
