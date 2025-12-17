@@ -118,9 +118,11 @@ with tab1:
         book_stats.columns = ['도서코드', '과목명', '교지명', '주문부수', '주문금액', '정가', '주문학교수']
         book_stats['시장점유율(%)'] = (book_stats['주문부수'] / book_stats['주문부수'].sum()) * 100
         
-        # 학교급 구분 추가
-        if '학교급명' in filtered_df.columns:
-            book_school_level = filtered_df.groupby('과목명')['학교급명'].first().to_dict()
+        # 학교급 구분 추가 (학교급 또는 학교급명 컬럼 사용)
+        school_level_col = '학교급' if '학교급' in filtered_df.columns else ('학교급명' if '학교급명' in filtered_df.columns else None)
+        
+        if school_level_col:
+            book_school_level = filtered_df.groupby('과목명')[school_level_col].first().to_dict()
             book_stats['학교급'] = book_stats['과목명'].map(book_school_level).fillna('미분류')
         else:
             book_stats['학교급'] = book_stats['과목명'].apply(get_school_level_from_subject)

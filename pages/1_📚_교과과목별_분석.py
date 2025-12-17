@@ -270,10 +270,12 @@ with tab1:
     # 과목 클릭 안내
     st.info("💡 **아래 테이블에서 과목을 클릭**하면 해당 과목의 상세 정보를 확인할 수 있습니다.")
     
-    # 학교급 구분 추가 (학교급명 컬럼이 있으면 사용, 없으면 과목명으로 추정)
-    if '학교급명' in filtered_order_df.columns:
-        # 도서코드별로 학교급명 매핑
-        book_school_level = filtered_order_df.groupby('과목명')['학교급명'].first().to_dict()
+    # 학교급 구분 추가 (학교급 또는 학교급명 컬럼 사용, 없으면 과목명으로 추정)
+    school_level_col = '학교급' if '학교급' in filtered_order_df.columns else ('학교급명' if '학교급명' in filtered_order_df.columns else None)
+    
+    if school_level_col:
+        # 도서코드별로 학교급 매핑
+        book_school_level = filtered_order_df.groupby('과목명')[school_level_col].first().to_dict()
         subject_stats['학교급'] = subject_stats['과목명'].map(book_school_level).fillna('미분류')
     else:
         subject_stats['학교급'] = subject_stats['과목명'].apply(get_school_level_from_subject)

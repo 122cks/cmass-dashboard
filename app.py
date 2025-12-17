@@ -158,6 +158,10 @@ def load_data():
             return row.get('교과서명', '')
 
         order_df['교과서명_구분'] = order_df.apply(add_school_level_to_subject, axis=1)
+        
+        # Add 학교급명 column (copy from 학교급) for consistency
+        if '학교급' in order_df.columns:
+            order_df['학교급명'] = order_df['학교급']
     else:
         # If product code missing in order data, fall back to original subject name
         order_df['교과서명_구분'] = order_df.get('교과서명', '')
