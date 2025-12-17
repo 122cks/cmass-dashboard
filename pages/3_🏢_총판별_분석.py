@@ -239,7 +239,7 @@ if '총판' in filtered_order_df.columns:
                     values=achievement_dist.values,
                     names=achievement_dist.index,
                     title="달성률 분포",
-                    color_discrete_sequence=px.colors.sequential.RdYlGn
+                    color_discrete_sequence=px.colors.diverging.RdYlGn
                 )
                 st.plotly_chart(fig_pie, use_container_width=True)
             
