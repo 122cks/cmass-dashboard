@@ -237,17 +237,6 @@ with tab1:
         total_students_filtered = total_df['학생수(계)'].sum()
         subject_stats['시장규모'] = total_students_filtered
         subject_stats['점유율(%)'] = (subject_stats['주문부수'] / total_students_filtered * 100).fillna(0)
-                on='도서코드',
-                how='left'
-            )
-        else:
-            subject_stats['시장규모'] = 0
-            subject_stats['점유율(%)'] = 0
-    else:
-        # Fallback: 기존 방식 (전체 학생수 기준)
-        total_students_filtered = total_df['학생수(계)'].sum()
-        subject_stats['시장규모'] = total_students_filtered
-        subject_stats['점유율(%)'] = (subject_stats['주문부수'] / total_students_filtered * 100).fillna(0)
     
     # 과목 클릭 안내
     st.info("💡 **아래 테이블에서 과목을 클릭**하면 해당 과목의 상세 정보를 확인할 수 있습니다.")
