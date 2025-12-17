@@ -378,7 +378,7 @@ with tab2:
                 
                 target_map = target_summary.groupby('총판명(공식)')['전체목표'].sum().to_dict()
                 dist_in_grade['목표부수'] = dist_in_grade['총판'].map(target_map).fillna(0)
-                dist_in_grade['달성률(%)'] = (dist_in_grade['실적2026'] / dist_in_grade['목표부수'] * 100).replace([float('inf'), -float('inf')], 0).fillna(0)
+                dist_in_grade['달성률(%)'] = (dist_in_grade['주문부수'] / dist_in_grade['목표부수'] * 100).replace([float('inf'), -float('inf')], 0).fillna(0)
                 
                 # 순위 계산 (달성률 기준)
                 dist_in_grade = dist_in_grade.sort_values('달성률(%)', ascending=False)

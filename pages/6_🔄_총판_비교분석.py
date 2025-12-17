@@ -104,11 +104,16 @@ with tab1:
     
     # Calculate comprehensive statistics with market share
     comparison_stats = []
+    
+    # 2026년도 주문만 필터링 (목표 달성률 계산용)
+    filtered_order_2026 = filtered_order[filtered_order['학년도'] == 2026] if '학년도' in filtered_order.columns else filtered_order
+    
     for dist in selected_distributors:
+        # 전체 데이터 (참고용)
         dist_data = filtered_order[filtered_order['총판'] == dist]
         
-        # 2026년도 주문만 필터링 (목표 달성률 계산용)
-        dist_data_2026 = dist_data[dist_data['학년도'] == 2026] if '학년도' in dist_data.columns else dist_data
+        # 2026년도 데이터 (달성률 계산용)
+        dist_data_2026 = filtered_order_2026[filtered_order_2026['총판'] == dist]
         
         # Determine school code column
         school_code_col = '정보공시학교코드' if '정보공시학교코드' in dist_data.columns else '학교코드'

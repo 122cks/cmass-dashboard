@@ -177,28 +177,28 @@ if '총판' in filtered_order_df.columns:
     with tab1:
         st.subheader("총판별 판매 현황")
         
-        # Distributor statistics (전체 주문 데이터)
-        school_code_col = '정보공시학교코드' if '정보공시학교코드' in filtered_order_df.columns else '학교코드'
+        st.info("💡 **목표는 2026년도 기준**이므로, 2026년도 주문만 집계하여 달성률을 계산합니다.")
         
-        dist_stats = filtered_order_df.groupby('총판').agg({
+        # 2026년도 주문만 필터링
+        filtered_order_2026 = filtered_order_df[filtered_order_df['학년도'] == 2026] if '학년도' in filtered_order_df.columns else filtered_order_df
+        
+        # Distributor statistics (전체 주문 데이터는 참고용)
+        school_code_col = '정보공시학교코드' if '정보공시학교코드' in filtered_order_2026.columns else '학교코드'
+        
+        # 2026년도 데이터로 집계
+        dist_stats = filtered_order_2026.groupby('총판').agg({
             '부수': 'sum',
-            '금액': 'sum' if '금액' in filtered_order_df.columns else 'count',
+            '금액': 'sum' if '금액' in filtered_order_2026.columns else 'count',
             school_code_col: 'nunique',
-            '과목명': 'nunique' if '과목명' in filtered_order_df.columns else 'count'
+            '과목명': 'nunique' if '과목명' in filtered_order_2026.columns else 'count'
         }).reset_index()
         
         dist_stats.columns = ['총판', '주문부수', '주문금액', '거래학교수', '취급과목수']
         dist_stats['판매비중(%)'] = (dist_stats['주문부수'] / dist_stats['주문부수'].sum()) * 100
         dist_stats['학교당평균'] = dist_stats['주문부수'] / dist_stats['거래학교수']
         
-        # 목표 데이터 병합 (목표1 + 목표2) - 2026년도 주문만 사용
+        # 목표 데이터 병합 (목표1 + 목표2)
         if not target_df.empty and '총판명(공식)' in target_df.columns:
-            # 2026년도 주문만 필터링
-            orders_2026 = filtered_order_df[filtered_order_df['학년도'] == 2026] if '학년도' in filtered_order_df.columns else filtered_order_df
-            
-            # 2026년도 주문 집계
-            dist_actual_2026 = orders_2026.groupby('총판')['부수'].sum().to_dict()
-            
             # 목표1 부수와 목표2 부수 합산하여 전체 목표 계산
             target_summary = target_df.copy()
             
@@ -217,11 +217,9 @@ if '총판' in filtered_order_df.columns:
             # 총판명으로 병합
             target_map = target_summary.groupby('총판명(공식)')['전체목표'].sum().to_dict()
             dist_stats['목표부수'] = dist_stats['총판'].map(target_map).fillna(0)
-            dist_stats['실적2026'] = dist_stats['총판'].map(dist_actual_2026).fillna(0)
-            dist_stats['달성률(%)'] = (dist_stats['실적2026'] / dist_stats['목표부수'] * 100).replace([float('inf'), -float('inf')], 0).fillna(0)
+            dist_stats['달성률(%)'] = (dist_stats['주문부수'] / dist_stats['목표부수'] * 100).replace([float('inf'), -float('inf')], 0).fillna(0)
         else:
             dist_stats['목표부수'] = 0
-            dist_stats['실적2026'] = 0
             dist_stats['달성률(%)'] = 0
         
         dist_stats = dist_stats.sort_values('주문부수', ascending=False)
