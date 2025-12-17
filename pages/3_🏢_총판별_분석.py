@@ -19,6 +19,8 @@ if 'total_df' not in st.session_state or 'order_df' not in st.session_state:
 
 total_df = st.session_state['total_df']
 order_df = st.session_state['order_df'].copy()
+target_df = st.session_state.get('target_df', pd.DataFrame())  # 목표 데이터 로드
+distributor_df = st.session_state.get('distributor_df', pd.DataFrame())  # 총판 정보 로드
 
 st.title("🏢 총판별 상세 분석")
 st.markdown("---")
@@ -53,7 +55,7 @@ if '총판' in filtered_order_df.columns:
     st.markdown("---")
     
     # Tab Layout
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📊 총판별 현황", "📈 실적 비교", "🎯 성과 분석", "💡 효율성 분석", "📋 상세 테이블"])
+    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 총판별 현황", "🎯 목표 대비 실적", "📈 실적 비교", "🎯 성과 분석", "💡 효율성 분석", "📋 상세 테이블"])
     
     with tab1:
         st.subheader("총판별 판매 현황")
@@ -71,6 +73,32 @@ if '총판' in filtered_order_df.columns:
         dist_stats.columns = ['총판', '주문부수', '주문금액', '거래학교수', '취급과목수']
         dist_stats['판매비중(%)'] = (dist_stats['주문부수'] / dist_stats['주문부수'].sum()) * 100
         dist_stats['학교당평균'] = dist_stats['주문부수'] / dist_stats['거래학교수']
+        
+        # 목표 데이터 병합 (목표1 + 목표2)
+        if not target_df.empty and '총판명(공식)' in target_df.columns:
+            # 목표1 부수와 목표2 부수 합산하여 전체 목표 계산
+            target_summary = target_df.copy()
+            
+            # 쉼표 제거 및 숫자 변환
+            for col in ['목표과목1 부수', '목표과목2 부수', '전체목표 부수']:
+                if col in target_summary.columns:
+                    target_summary[col] = target_summary[col].astype(str).str.replace(',', '').str.replace(' ', '')
+                    target_summary[col] = pd.to_numeric(target_summary[col], errors='coerce').fillna(0)
+            
+            # 전체 목표 = 목표1 + 목표2
+            if '목표과목1 부수' in target_summary.columns and '목표과목2 부수' in target_summary.columns:
+                target_summary['전체목표'] = target_summary['목표과목1 부수'] + target_summary['목표과목2 부수']
+            else:
+                target_summary['전체목표'] = target_summary.get('전체목표 부수', 0)
+            
+            # 총판명으로 병합
+            target_map = target_summary.groupby('총판명(공식)')['전체목표'].sum().to_dict()
+            dist_stats['목표부수'] = dist_stats['총판'].map(target_map).fillna(0)
+            dist_stats['달성률(%)'] = (dist_stats['주문부수'] / dist_stats['목표부수'] * 100).replace([float('inf'), -float('inf')], 0).fillna(0)
+        else:
+            dist_stats['목표부수'] = 0
+            dist_stats['달성률(%)'] = 0
+        
         dist_stats = dist_stats.sort_values('주문부수', ascending=False)
         
         col1, col2 = st.columns([2, 1])
@@ -133,6 +161,161 @@ if '총판' in filtered_order_df.columns:
             st.plotly_chart(fig_waterfall, use_container_width=True)
     
     with tab2:
+        st.subheader("🎯 목표 대비 실적 분석")
+        
+        # 목표가 있는 총판만 필터링
+        target_dists = dist_stats[dist_stats['목표부수'] > 0].copy()
+        
+        if len(target_dists) > 0:
+            col1, col2, col3, col4 = st.columns(4)
+            
+            with col1:
+                total_target = target_dists['목표부수'].sum()
+                st.metric("전체 목표", f"{total_target:,.0f}부")
+            
+            with col2:
+                total_achieved = target_dists['주문부수'].sum()
+                st.metric("전체 실적", f"{total_achieved:,.0f}부")
+            
+            with col3:
+                overall_rate = (total_achieved / total_target * 100) if total_target > 0 else 0
+                st.metric("전체 달성률", f"{overall_rate:.1f}%",
+                         delta=f"{total_achieved - total_target:,.0f}부")
+            
+            with col4:
+                achieved_count = len(target_dists[target_dists['달성률(%)'] >= 100])
+                st.metric("목표 달성 총판", f"{achieved_count}/{len(target_dists)}개")
+            
+            st.markdown("---")
+            
+            # 달성률 분포
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                # 목표 vs 실적 비교 차트
+                fig_compare = go.Figure()
+                
+                top_target = target_dists.head(20)
+                
+                fig_compare.add_trace(go.Bar(
+                    name='목표',
+                    x=top_target['총판'],
+                    y=top_target['목표부수'],
+                    marker_color='lightblue',
+                    text=top_target['목표부수'],
+                    texttemplate='%{text:,.0f}',
+                    textposition='outside'
+                ))
+                
+                fig_compare.add_trace(go.Bar(
+                    name='실적',
+                    x=top_target['총판'],
+                    y=top_target['주문부수'],
+                    marker_color='darkblue',
+                    text=top_target['주문부수'],
+                    texttemplate='%{text:,.0f}',
+                    textposition='outside'
+                ))
+                
+                fig_compare.update_layout(
+                    title="총판별 목표 vs 실적 (TOP 20)",
+                    barmode='group',
+                    xaxis_tickangle=-45,
+                    height=500,
+                    yaxis_title="부수"
+                )
+                st.plotly_chart(fig_compare, use_container_width=True)
+            
+            with col2:
+                # 달성률 분포 파이 차트
+                achievement_groups = pd.cut(
+                    target_dists['달성률(%)'],
+                    bins=[0, 50, 80, 100, 150, float('inf')],
+                    labels=['50% 미만', '50-80%', '80-100%', '100-150%', '150% 이상']
+                )
+                achievement_dist = achievement_groups.value_counts()
+                
+                fig_pie = px.pie(
+                    values=achievement_dist.values,
+                    names=achievement_dist.index,
+                    title="달성률 분포",
+                    color_discrete_sequence=px.colors.sequential.RdYlGn
+                )
+                st.plotly_chart(fig_pie, use_container_width=True)
+            
+            # 달성률 상세
+            st.markdown("---")
+            st.subheader("📊 달성률 상세 현황")
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.markdown("#### ⭐ 목표 초과 달성 (100% 이상)")
+                over_achieved = target_dists[target_dists['달성률(%)'] >= 100].sort_values('달성률(%)', ascending=False)
+                
+                if len(over_achieved) > 0:
+                    display_cols = ['총판', '목표부수', '주문부수', '달성률(%)']
+                    st.dataframe(
+                        over_achieved[display_cols].style.format({
+                            '목표부수': '{:,.0f}',
+                            '주문부수': '{:,.0f}',
+                            '달성률(%)': '{:.1f}%'
+                        }).background_gradient(subset=['달성률(%)'], cmap='Greens'),
+                        use_container_width=True,
+                        height=300
+                    )
+                else:
+                    st.info("목표 달성 총판이 없습니다.")
+            
+            with col2:
+                st.markdown("#### 🎯 목표 미달성 (<100%)")
+                under_achieved = target_dists[target_dists['달성률(%)'] < 100].sort_values('달성률(%)', ascending=False)
+                
+                if len(under_achieved) > 0:
+                    display_cols = ['총판', '목표부수', '주문부수', '달성률(%)']
+                    st.dataframe(
+                        under_achieved[display_cols].style.format({
+                            '목표부수': '{:,.0f}',
+                            '주문부수': '{:,.0f}',
+                            '달성률(%)': '{:.1f}%'
+                        }).background_gradient(subset=['달성률(%)'], cmap='Reds_r'),
+                        use_container_width=True,
+                        height=300
+                    )
+                else:
+                    st.success("모든 총판이 목표를 달성했습니다!")
+            
+            # 갭 분석
+            st.markdown("---")
+            st.subheader("📉 목표 대비 갭 분석")
+            
+            target_dists['갭'] = target_dists['주문부수'] - target_dists['목표부수']
+            gap_chart = target_dists.sort_values('갭').head(20)
+            
+            colors = ['red' if x < 0 else 'green' for x in gap_chart['갭']]
+            
+            fig_gap = go.Figure(go.Bar(
+                x=gap_chart['총판'],
+                y=gap_chart['갭'],
+                marker_color=colors,
+                text=gap_chart['갭'],
+                texttemplate='%{text:,.0f}',
+                textposition='outside'
+            ))
+            
+            fig_gap.update_layout(
+                title="총판별 목표 대비 갭 (실적 - 목표)",
+                xaxis_tickangle=-45,
+                yaxis_title="갭 (부수)",
+                height=400
+            )
+            fig_gap.add_hline(y=0, line_dash="dash", line_color="black")
+            st.plotly_chart(fig_gap, use_container_width=True)
+            
+        else:
+            st.warning("목표 데이터가 없습니다.")
+    
+    with tab3:
         st.subheader("📈 총판 실적 비교")
         
         col1, col2 = st.columns(2)
@@ -201,7 +384,7 @@ if '총판' in filtered_order_df.columns:
         )
         st.plotly_chart(fig_radar, use_container_width=True)
     
-    with tab3:
+    with tab4:
         st.subheader("🎯 총판별 성과 심층 분석")
         
         # Performance ranking
@@ -335,7 +518,7 @@ if '총판' in filtered_order_df.columns:
                 )
                 st.plotly_chart(fig_pie, use_container_width=True)
     
-    with tab4:
+    with tab5:
         st.subheader("� 총판 효율성 및 성장 분석")
         
         col1, col2 = st.columns(2)
@@ -462,7 +645,7 @@ if '총판' in filtered_order_df.columns:
                      delta=f"HHI: {hhi:.0f}",
                      help="HHI (Herfindahl-Hirschman Index): 시장 집중도 지표")
     
-    with tab5:
+    with tab6:
         st.subheader("📋 총판별 상세 데이터")
         
         # Search
