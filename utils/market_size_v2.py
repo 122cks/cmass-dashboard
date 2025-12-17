@@ -40,7 +40,7 @@ def infer_subject_grade_for_school(order_quantity, grade_students):
         return None
     
     # 가장 오차가 적은 학년 선택 (15% 이내 오차만 허용)
-    min_grade = min(differences, key=differences.get)
+    min_grade = min(differences, key=lambda x: differences[x])
     if differences[min_grade] < 0.15:  # 15% 이내 오차
         return min_grade
     

@@ -249,7 +249,7 @@ with tab1:
         
         fig_radar = go.Figure()
         for idx, row in comparison_df.iterrows():
-            values = normalized_data.iloc[idx].tolist()
+            values = normalized_data.iloc[idx].tolist()  # type: ignore
             values.append(values[0])
             
             fig_radar.add_trace(go.Scatterpolar(

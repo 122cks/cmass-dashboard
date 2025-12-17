@@ -250,7 +250,7 @@ with tab2:
     color_map = {'S': '#FFD700', 'A': '#C0C0C0', 'B': '#CD7F32', 'C': '#4CAF50', '미분류': '#9E9E9E'}
     
     for idx, row in grade_df.iterrows():
-        values = normalized_data.iloc[idx].tolist()
+        values = normalized_data.iloc[idx].tolist()  # type: ignore
         values.append(values[0])
         
         fig_radar.add_trace(go.Scatterpolar(
