@@ -260,7 +260,7 @@ if '총판' in filtered_order_df.columns:
                             '목표부수': '{:,.0f}',
                             '주문부수': '{:,.0f}',
                             '달성률(%)': '{:.1f}%'
-                        }).background_gradient(subset=['달성률(%)'], cmap='Greens'),
+                        }),
                         use_container_width=True,
                         height=300
                     )
@@ -278,7 +278,7 @@ if '총판' in filtered_order_df.columns:
                             '목표부수': '{:,.0f}',
                             '주문부수': '{:,.0f}',
                             '달성률(%)': '{:.1f}%'
-                        }).background_gradient(subset=['달성률(%)'], cmap='Reds_r'),
+                        }),
                         use_container_width=True,
                         height=300
                     )

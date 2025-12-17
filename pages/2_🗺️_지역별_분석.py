@@ -509,8 +509,18 @@ with tab3:
             st.markdown("---")
             st.subheader("🏢 시군구별 총판 분포")
             
-            city_dist = city_orders.groupby('시군구2')['총판'].apply(lambda x: ', '.join(sorted(set(x.dropna())))).reset_index()
-            city_dist = pd.merge(city_dist, city_stats[['시군구', '총판수', '주문부수']], on='시군구')
+            if '총판' in city_orders.columns:
+                city_dist = city_orders.groupby('시군구2')['총판'].apply(lambda x: ', '.join(sorted(set(x.dropna())))).reset_index()
+                # city_stats의 시군구 컴럼 확인 후 병합
+                if '총판수' in city_stats.columns and '주문부수' in city_stats.columns:
+                    merge_cols = []
+                    if '총판수' in city_stats.columns:
+                        merge_cols.append('총판수')
+                    if '주문부수' in city_stats.columns:
+                        merge_cols.append('주문부수')
+                    
+                    if merge_cols and '시군구2' in city_stats.columns:
+                        city_dist = pd.merge(city_dist, city_stats[['시군구2'] + merge_cols], on='시군구2', how='left')
             
             st.dataframe(
                 city_dist.rename(columns={

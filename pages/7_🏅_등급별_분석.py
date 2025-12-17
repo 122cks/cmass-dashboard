@@ -424,7 +424,9 @@ with tab4:
     st.markdown("---")
     st.subheader("📋 등급별 과목 상세")
     
-    pivot_subject = subject_by_grade.pivot(index='과목명', columns='등급', values='부수').fillna(0)
+    # 중복 제거 후 pivot (과목명 + 등급 조합이 중복되면 합산)
+    subject_agg = subject_by_grade.groupby(['과목명', '등급'])['부수'].sum().reset_index()
+    pivot_subject = subject_agg.pivot(index='과목명', columns='등급', values='부수').fillna(0)
     pivot_subject['합계'] = pivot_subject.sum(axis=1)
     pivot_subject = pivot_subject.sort_values('합계', ascending=False).head(20)
     

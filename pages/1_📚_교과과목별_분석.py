@@ -241,14 +241,31 @@ with tab3:
     
     # Merge order data with product info to get school level
     if not product_df.empty and '학교급' in product_df.columns and '코드' in product_df.columns:
-        # Merge with product data
-        order_with_level = pd.merge(
-            filtered_order_df,
-            product_df[['코드', '학교급', '교과군', '교과서명']].drop_duplicates(),
-            left_on='도서코드' if '도서코드' in filtered_order_df.columns else '과목코드',
-            right_on='코드',
-            how='left'
-        )
+        # 도서코드 컬럼 찾기
+        book_code_col = None
+        for col in ['도서코드(교지명구분)', '도서코드', '과목코드']:
+            if col in filtered_order_df.columns:
+                book_code_col = col
+                break
+        
+        if book_code_col:
+            # 타입 통일 (문자열로 변환)
+            product_merge = product_df[['코드', '학교급', '교과군', '교과서명']].drop_duplicates().copy()
+            product_merge['코드'] = product_merge['코드'].astype(str)
+            
+            filtered_order_copy = filtered_order_df.copy()
+            filtered_order_copy[book_code_col] = filtered_order_copy[book_code_col].astype(str)
+            
+            # Merge with product data
+            order_with_level = pd.merge(
+                filtered_order_copy,
+                product_merge,
+                left_on=book_code_col,
+                right_on='코드',
+                how='left'
+            )
+        else:
+            order_with_level = filtered_order_df.copy()
     else:
         order_with_level = filtered_order_df.copy()
     
