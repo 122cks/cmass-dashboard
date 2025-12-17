@@ -13,6 +13,7 @@ if 'total_df' not in st.session_state or 'order_df' not in st.session_state:
 
 total_df = st.session_state['total_df']
 order_df = st.session_state['order_df']
+market_analysis = st.session_state.get('market_analysis', pd.DataFrame())  # 시장 분석 데이터
 
 st.title("🔍 다차원 비교 분석")
 st.markdown("---")

@@ -19,6 +19,7 @@ if 'total_df' not in st.session_state or 'order_df' not in st.session_state:
 
 total_df = st.session_state['total_df']
 order_df = st.session_state['order_df'].copy()
+market_analysis = st.session_state.get('market_analysis', pd.DataFrame())  # 시장 분석 데이터
 
 st.title("📚 교과/과목별 상세 분석")
 st.markdown("---")
@@ -92,9 +93,32 @@ with tab1:
     
     subject_stats = subject_stats.sort_values('주문부수', ascending=False)
     
-    # Calculate market share
-    total_students_filtered = total_df['학생수(계)'].sum()
-    subject_stats['점유율(%)'] = (subject_stats['주문부수'] / total_students_filtered) * 100
+    # 정확한 시장점유율 계산 (market_analysis 데이터 활용)
+    if not market_analysis.empty and '도서코드' in market_analysis.columns:
+        # 도서코드별 시장 규모 및 점유율 계산
+        market_summary = market_analysis.groupby('도서코드').agg({
+            '주문부수': 'sum',
+            '시장규모': 'sum',
+            '과목명': 'first'
+        }).reset_index()
+        market_summary['점유율(%)'] = (market_summary['주문부수'] / market_summary['시장규모'] * 100).fillna(0)
+        
+        # subject_stats에 병합
+        if '도서코드' in subject_stats.columns:
+            subject_stats = pd.merge(
+                subject_stats,
+                market_summary[['도서코드', '시장규모', '점유율(%)']],
+                on='도서코드',
+                how='left'
+            )
+        else:
+            subject_stats['시장규모'] = 0
+            subject_stats['점유율(%)'] = 0
+    else:
+        # Fallback: 기존 방식 (전체 학생수 기준)
+        total_students_filtered = total_df['학생수(계)'].sum()
+        subject_stats['시장규모'] = total_students_filtered
+        subject_stats['점유율(%)'] = (subject_stats['주문부수'] / total_students_filtered * 100).fillna(0)
     
     col1, col2 = st.columns([2, 1])
     

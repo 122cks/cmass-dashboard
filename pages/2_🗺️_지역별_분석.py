@@ -19,6 +19,7 @@ if 'total_df' not in st.session_state or 'order_df' not in st.session_state:
 total_df = st.session_state['total_df']
 order_df = st.session_state['order_df']
 distributor_df = st.session_state.get('distributor_df', pd.DataFrame())
+market_analysis = st.session_state.get('market_analysis', pd.DataFrame())  # 시장 분석 데이터
 
 # Add distributor info to order data (시군구 정보 추가)
 if not distributor_df.empty and '총판명' in distributor_df.columns:

@@ -15,6 +15,8 @@ total_df = st.session_state['total_df']
 order_df = st.session_state['order_df']
 target_df = st.session_state.get('target_df', pd.DataFrame())
 distributor_df = st.session_state.get('distributor_df', pd.DataFrame())
+market_analysis = st.session_state.get('market_analysis', pd.DataFrame())  # 시장 분석 데이터
+subject_market_by_dist = st.session_state.get('subject_market_by_dist', pd.DataFrame())  # 총판별 과목 시장
 
 st.title("🔄 총판 비교 분석")
 st.markdown("---")

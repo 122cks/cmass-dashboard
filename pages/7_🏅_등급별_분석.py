@@ -15,6 +15,8 @@ order_df = st.session_state['order_df'].copy()
 distributor_df = st.session_state.get('distributor_df', pd.DataFrame())
 target_df = st.session_state.get('target_df', pd.DataFrame())
 sort_by_grade = st.session_state.get('sort_by_grade', None)
+total_df = st.session_state.get('total_df', pd.DataFrame())
+market_analysis = st.session_state.get('market_analysis', pd.DataFrame())  # 시장 분석 데이터
 
 st.title("🏅 등급별 총판 분석")
 st.markdown("---")
