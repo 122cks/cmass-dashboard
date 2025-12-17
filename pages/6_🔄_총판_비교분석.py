@@ -66,7 +66,7 @@ with tab1:
         school_codes = dist_data[school_code_col].unique() if school_code_col in dist_data.columns else []
         
         if not total_df.empty and len(school_codes) > 0:
-            dist_schools = total_df[total_df['정보공시 학교코드'].isin(school_codes.astype(str))]
+            dist_schools = total_df[total_df['정보공시 학교코드'].isin(pd.Series(school_codes).astype(str))]
             if not dist_schools.empty:
                 # Calculate market size based on school level (중등=3, 고등=4)
                 # 중등 1,2학년 + 고등 1,2학년 학생수 합계

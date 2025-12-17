@@ -50,7 +50,7 @@ with tab1:
         
         # Calculate market size (중등/고등 1,2학년 학생수)
         if not total_df.empty:
-            schools_a_df = total_df[total_df['정보공시 학교코드'].isin(schools_a_codes.astype(str))]
+            schools_a_df = total_df[total_df['정보공시 학교코드'].isin(pd.Series(schools_a_codes).astype(str))]
             market_a = 0
             for _, school in schools_a_df.iterrows():
                 grade_code = school.get('학교급코드', 0)
@@ -59,7 +59,7 @@ with tab1:
                 elif grade_code == 4:  # 고등학교
                     market_a += school.get('1학년 학생수', 0) + school.get('2학년 학생수', 0)
             
-            schools_b_df = total_df[total_df['정보공시 학교코드'].isin(schools_b_codes.astype(str))]
+            schools_b_df = total_df[total_df['정보공시 학교코드'].isin(pd.Series(schools_b_codes).astype(str))]
             market_b = 0
             for _, school in schools_b_df.iterrows():
                 grade_code = school.get('학교급코드', 0)
@@ -167,7 +167,7 @@ with tab1:
         
         # Calculate market size
         if not total_df.empty:
-            schools_a_df = total_df[total_df['정보공시 학교코드'].isin(schools_a_codes.astype(str))]
+            schools_a_df = total_df[total_df['정보공시 학교코드'].isin(pd.Series(schools_a_codes).astype(str))]
             market_a = 0
             for _, school in schools_a_df.iterrows():
                 grade_code = school.get('학교급코드', 0)
@@ -176,7 +176,7 @@ with tab1:
                 elif grade_code == 4:  # 고등학교
                     market_a += school.get('1학년 학생수', 0) + school.get('2학년 학생수', 0)
             
-            schools_b_df = total_df[total_df['정보공시 학교코드'].isin(schools_b_codes.astype(str))]
+            schools_b_df = total_df[total_df['정보공시 학교코드'].isin(pd.Series(schools_b_codes).astype(str))]
             market_b = 0
             for _, school in schools_b_df.iterrows():
                 grade_code = school.get('학교급코드', 0)

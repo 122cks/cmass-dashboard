@@ -224,10 +224,7 @@ def calculate_market_size_by_subject_v2(order_df, total_df, product_df=None):
         subject_summary['주문부수'] / subject_summary['시장규모(학생수)'] * 100
     ).fillna(0)
     
-    # 대상 학년 정보 추가 (대표값)
-    grade_info = school_subject.groupby(book_code_col)['추정학년'].agg(
-        lambda x: f"{int(x.mode()[0])}학년" if len(x.mode()) > 0 and pd.notna(x.mode()[0]) else "가변"
-    
+
     # 정렬
     subject_summary = subject_summary.sort_values('주문부수', ascending=False)
     

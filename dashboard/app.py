@@ -113,7 +113,7 @@ with tab2:
         fig_region = px.bar(region_stats, x=region_col, y='점유율(%)', 
                             title="지역별 점유율 (%)", 
                             hover_data=['주문부수', '전체학생수'],
-                            text_auto='.2f')
+                            text_auto=True)
         st.plotly_chart(fig_region, use_container_width=True)
         
     with col2:
