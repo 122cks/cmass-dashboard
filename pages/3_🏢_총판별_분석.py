@@ -224,18 +224,18 @@ if '총판' in filtered_order_df.columns:
         col1, col2 = st.columns([2, 1])
         
         with col1:
-            # Bar chart
+            # 점유율 차트로 변경 (기본 표시)
             fig = px.bar(
                 dist_stats.head(20),
                 x='총판',
-                y='주문부수',
-                title="총판별 주문 부수 TOP 20",
-                text='주문부수',
-                color='주문부수',
+                y='판매비중(%)',
+                title="총판별 시장 점유율 TOP 20 (%)",
+                text='판매비중(%)',
+                color='판매비중(%)',
                 color_continuous_scale='Greens'
             )
-            fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-            fig.update_layout(height=500, xaxis_tickangle=-45, showlegend=False)
+            fig.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+            fig.update_layout(height=500, xaxis_tickangle=-45, showlegend=False, yaxis_title="점유율 (%)")
             st.plotly_chart(fig, use_container_width=True)
         
         with col2:

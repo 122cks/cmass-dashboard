@@ -328,26 +328,119 @@ with tab1:
     )
 
 with tab2:
-    st.subheader("📈 등급별 성과 심층 비교")
+    st.subheader("📈 등급 내 총판별 점유율 및 순위")
     
-    col1, col2 = st.columns(2)
+    # 등급별로 탭 생성
+    grade_tabs = st.tabs([f"{grade}등급" for grade in selected_grades])
     
-    with col1:
-        # Average per distributor
-        fig = px.bar(
-            grade_df,
-            x='등급',
-            y='총판당평균',
-            title="등급별 총판당 평균 주문",
-            text='총판당평균',
-            color='등급',
-            color_discrete_map={'S': '#FFD700', 'A': '#C0C0C0', 'B': '#CD7F32', 'C': '#4CAF50', '미분류': '#9E9E9E'}
-        )
-        fig.update_traces(texttemplate='%{text:,.1f}', textposition='outside')
-        st.plotly_chart(fig, use_container_width=True)
-    
-    with col2:
-        # Average per school
+    for grade_idx, grade in enumerate(selected_grades):
+        with grade_tabs[grade_idx]:
+            st.markdown(f"### 🏅 {grade}등급 총판 순위")
+            
+            # 해당 등급의 총판 데이터
+            grade_data = filtered_order[filtered_order['등급'] == grade]
+            
+            school_code_col = '정보공시학교코드' if '정보공시학교코드' in grade_data.columns else '학교코드'
+            
+            # 총판별 집계
+            dist_in_grade = grade_data.groupby('총판').agg({
+                '부수': 'sum',
+                school_code_col: 'nunique',
+                '금액': 'sum' if '금액' in grade_data.columns else 'count'
+            }).reset_index()
+            dist_in_grade.columns = ['총판', '주문부수', '학교수', '주문금액']
+            
+            # 등급 내 점유율 계산
+            total_in_grade = dist_in_grade['주문부수'].sum()
+            dist_in_grade['등급내점유율(%)'] = (dist_in_grade['주문부수'] / total_in_grade * 100) if total_in_grade > 0 else 0
+            
+            # 목표 데이터 병합
+            target_df = st.session_state.get('target_df', pd.DataFrame())
+            if not target_df.empty and '총판명(공식)' in target_df.columns:
+                # 목표 계산
+                target_summary = target_df.copy()
+                for col in ['목표과목1 부수', '목표과목2 부수', '전체목표 부수']:
+                    if col in target_summary.columns:
+                        target_summary[col] = target_summary[col].astype(str).str.replace(',', '').str.replace(' ', '')
+                        target_summary[col] = pd.to_numeric(target_summary[col], errors='coerce').fillna(0)
+                
+                if '목표과목1 부수' in target_summary.columns and '목표과목2 부수' in target_summary.columns:
+                    target_summary['전체목표'] = target_summary['목표과목1 부수'] + target_summary['목표과목2 부수']
+                else:
+                    target_summary['전체목표'] = target_summary.get('전체목표 부수', 0)
+                
+                target_map = target_summary.groupby('총판명(공식)')['전체목표'].sum().to_dict()
+                dist_in_grade['목표부수'] = dist_in_grade['총판'].map(target_map).fillna(0)
+                dist_in_grade['달성률(%)'] = (dist_in_grade['주문부수'] / dist_in_grade['목표부수'] * 100).replace([float('inf'), -float('inf')], 0).fillna(0)
+                
+                # 순위 계산 (달성률 기준)
+                dist_in_grade = dist_in_grade.sort_values('달성률(%)', ascending=False)
+                dist_in_grade['달성률순위'] = range(1, len(dist_in_grade) + 1)
+            else:
+                dist_in_grade['목표부수'] = 0
+                dist_in_grade['달성률(%)'] = 0
+                dist_in_grade['달성률순위'] = 0
+            
+            # 점유율 순위 계산
+            dist_in_grade = dist_in_grade.sort_values('등급내점유율(%)', ascending=False)
+            dist_in_grade['점유율순위'] = range(1, len(dist_in_grade) + 1)
+            
+            # 차트 표시
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # 등급 내 점유율 차트
+                fig1 = px.bar(
+                    dist_in_grade.head(15),
+                    x='총판',
+                    y='등급내점유율(%)',
+                    title=f"{grade}등급 내 점유율 TOP 15",
+                    text='등급내점유율(%)',
+                    color='등급내점유율(%)',
+                    color_continuous_scale='Blues'
+                )
+                fig1.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+                fig1.update_layout(xaxis_tickangle=-45, height=400)
+                st.plotly_chart(fig1, use_container_width=True)
+            
+            with col2:
+                # 목표 달성률 차트
+                if dist_in_grade['목표부수'].sum() > 0:
+                    fig2 = px.bar(
+                        dist_in_grade[dist_in_grade['목표부수'] > 0].head(15),
+                        x='총판',
+                        y='달성률(%)',
+                        title=f"{grade}등급 목표 달성률 TOP 15",
+                        text='달성률(%)',
+                        color='달성률(%)',
+                        color_continuous_scale='RdYlGn'
+                    )
+                    fig2.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+                    fig2.update_layout(xaxis_tickangle=-45, height=400)
+                    fig2.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="목표선")
+                    st.plotly_chart(fig2, use_container_width=True)
+                else:
+                    st.info("목표 데이터가 없습니다.")
+            
+            # 순위 테이블
+            st.markdown("#### 📊 종합 순위표")
+            
+            display_cols = ['점유율순위', '총판', '주문부수', '등급내점유율(%)', '학교수']
+            if dist_in_grade['목표부수'].sum() > 0:
+                display_cols.extend(['목표부수', '달성률(%)', '달성률순위'])
+            
+            st.dataframe(
+                dist_in_grade[display_cols].head(20).style.format({
+                    '주문부수': '{:,.0f}',
+                    '등급내점유율(%)': '{:.2f}',
+                    '학교수': '{:,.0f}',
+                    '목표부수': '{:,.0f}',
+                    '달성률(%)': '{:.1f}'
+                }),
+                use_container_width=True
+            )
+
+with tab3:
         fig2 = px.bar(
             grade_df,
             x='등급',
