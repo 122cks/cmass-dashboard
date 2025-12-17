@@ -52,6 +52,128 @@ if not distributor_df.empty and '총판명' in distributor_df.columns:
 st.title("🗺️ 지역별 상세 분석")
 st.markdown("---")
 
+# Modal for detailed region info
+@st.dialog("🗺️ 지역 상세 정보", width="large")
+def show_region_detail(region_name):
+    """지역별 상세 정보 모달"""
+    st.subheader(f"📍 {region_name}")
+    
+    # 해당 지역의 모든 주문 데이터
+    region_col = '시도' if '시도' in st.session_state['order_df'].columns else '시도교육청'
+    region_orders = st.session_state['order_df'][
+        st.session_state['order_df'][region_col] == region_name
+    ].copy()
+    
+    # 기본 통계
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("총 주문 부수", f"{region_orders['부수'].sum():,.0f}부")
+    with col2:
+        school_col = '정보공시학교코드' if '정보공시학교코드' in region_orders.columns else '학교코드'
+        st.metric("주문 학교 수", f"{region_orders[school_col].nunique():,}개")
+    with col3:
+        st.metric("총판 수", f"{region_orders['총판'].nunique():,}개" if '총판' in region_orders.columns else "N/A")
+    with col4:
+        st.metric("과목 수", f"{region_orders['과목명'].nunique():,}개" if '과목명' in region_orders.columns else "N/A")
+    
+    st.markdown("---")
+    
+    # 탭으로 구분
+    detail_tab1, detail_tab2, detail_tab3 = st.tabs(["🏫 학교별 주문", "📚 과목별 분석", "🏢 총판별 분포"])
+    
+    with detail_tab1:
+        st.subheader("학교별 주문 현황")
+        school_orders = region_orders.groupby('학교명').agg({
+            '부수': 'sum',
+            '금액': 'sum' if '금액' in region_orders.columns else 'count',
+            '과목명': 'nunique' if '과목명' in region_orders.columns else 'count'
+        }).reset_index()
+        school_orders.columns = ['학교명', '주문부수', '주문금액', '과목수']
+        school_orders = school_orders.sort_values('주문부수', ascending=False)
+        
+        # 차트
+        fig = px.bar(
+            school_orders.head(30),
+            x='주문부수',
+            y='학교명',
+            orientation='h',
+            title="상위 30개 학교 주문 현황",
+            color='과목수'
+        )
+        fig.update_layout(height=700, yaxis={'categoryorder': 'total ascending'})
+        st.plotly_chart(fig, use_container_width=True)
+        
+        # 테이블
+        st.dataframe(
+            school_orders.style.format({
+                '주문부수': '{:,.0f}',
+                '주문금액': '{:,.0f}',
+                '과목수': '{:.0f}'
+            }),
+            use_container_width=True,
+            height=400
+        )
+    
+    with detail_tab2:
+        st.subheader("과목별 주문 현황")
+        if '과목명' in region_orders.columns:
+            subject_orders = region_orders.groupby('과목명').agg({
+                '부수': 'sum',
+                school_col: 'nunique'
+            }).reset_index()
+            subject_orders.columns = ['과목명', '주문부수', '학교수']
+            subject_orders = subject_orders.sort_values('주문부수', ascending=False)
+            
+            fig = px.bar(
+                subject_orders.head(20),
+                x='과목명',
+                y='주문부수',
+                title="과목별 주문 현황 TOP 20",
+                color='학교수',
+                color_continuous_scale='Viridis'
+            )
+            fig.update_xaxis(tickangle=-45)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.dataframe(
+                subject_orders.style.format({
+                    '주문부수': '{:,.0f}',
+                    '학교수': '{:,.0f}'
+                }),
+                use_container_width=True,
+                height=300
+            )
+        else:
+            st.info("과목 정보가 없습니다.")
+    
+    with detail_tab3:
+        st.subheader("총판별 분포")
+        if '총판' in region_orders.columns:
+            dist_orders = region_orders.groupby('총판').agg({
+                '부수': 'sum',
+                school_col: 'nunique'
+            }).reset_index()
+            dist_orders.columns = ['총판', '주문부수', '학교수']
+            dist_orders = dist_orders.sort_values('주문부수', ascending=False)
+            
+            fig = px.pie(
+                dist_orders,
+                values='주문부수',
+                names='총판',
+                title="총판별 주문 비중"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.dataframe(
+                dist_orders.style.format({
+                    '주문부수': '{:,.0f}',
+                    '학교수': '{:,.0f}'
+                }),
+                use_container_width=True
+            )
+        else:
+            st.info("총판 정보가 없습니다.")
+
 # Add region classification helper function
 def classify_region_direction(region_name):
     """Classify region into North/South based on name"""
@@ -176,6 +298,9 @@ with tab1:
         region_stats['미점유학생'] = region_stats['전체학생수'] - region_stats['주문부수']
         region_stats = region_stats.sort_values('점유율(%)', ascending=False)
         
+        # 지역 클릭 안내
+        st.info("💡 **아래 테이블에서 지역을 클릭**하면 해당 지역의 상세 정보를 확인할 수 있습니다.")
+        
         col1, col2 = st.columns(2)
         
         with col1:
@@ -203,6 +328,28 @@ with tab1:
             )
             fig_pie.update_traces(textposition='inside', textinfo='percent+label')
             st.plotly_chart(fig_pie, use_container_width=True)
+        
+        # 클릭 가능한 지역 테이블
+        st.markdown("### 📋 지역별 상세 데이터 (클릭하여 상세보기)")
+        
+        # Display top regions with click buttons
+        for idx, row in region_stats.head(20).iterrows():
+            col_btn, col_name, col_orders, col_schools, col_share, col_students = st.columns([1, 3, 2, 2, 2, 2])
+            
+            with col_btn:
+                if st.button("📍", key=f"region_btn_{idx}", help="상세 정보 보기"):
+                    show_region_detail(row['시도교육청'])
+            
+            with col_name:
+                st.write(f"**{row['시도교육청']}**")
+            with col_orders:
+                st.write(f"{row['주문부수']:,.0f}부")
+            with col_schools:
+                st.write(f"{row['학교수']:,.0f}개교")
+            with col_share:
+                st.write(f"{row['점유율(%)']:.1f}%")
+            with col_students:
+                st.write(f"{row['전체학생수']:,.0f}명")
         
         # Detailed comparison
         st.markdown("---")

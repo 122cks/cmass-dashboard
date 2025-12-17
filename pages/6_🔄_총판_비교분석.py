@@ -21,6 +21,53 @@ subject_market_by_dist = st.session_state.get('subject_market_by_dist', pd.DataF
 st.title("🔄 총판 비교 분석")
 st.markdown("---")
 
+# Modal for detailed comparison
+@st.dialog("📊 총판 상세 비교", width="large")
+def show_comparison_detail(dist1, dist2):
+    """두 총판 상세 비교 모달"""
+    st.subheader(f"🔄 {dist1} vs {dist2}")
+    
+    order_df = st.session_state['order_df']
+    dist1_orders = order_df[order_df['총판'] == dist1]
+    dist2_orders = order_df[order_df['총판'] == dist2]
+    
+    # 기본 비교
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown(f"### 📌 {dist1}")
+        st.metric("주문 부수", f"{dist1_orders['부수'].sum():,.0f}부")
+        school_col = '정보공시학교코드' if '정보공시학교코드' in dist1_orders.columns else '학교코드'
+        st.metric("학교 수", f"{dist1_orders[school_col].nunique():,}개")
+    
+    with col2:
+        st.markdown(f"### 📌 {dist2}")
+        st.metric("주문 부수", f"{dist2_orders['부수'].sum():,.0f}부")
+        st.metric("학교 수", f"{dist2_orders[school_col].nunique():,}개")
+    
+    st.markdown("---")
+    
+    # 과목별 비교
+    if '과목명' in dist1_orders.columns:
+        st.subheader("📚 과목별 비교")
+        
+        subject1 = dist1_orders.groupby('과목명')['부수'].sum().reset_index()
+        subject1.columns = ['과목명', dist1]
+        
+        subject2 = dist2_orders.groupby('과목명')['부수'].sum().reset_index()
+        subject2.columns = ['과목명', dist2]
+        
+        subject_comp = pd.merge(subject1, subject2, on='과목명', how='outer').fillna(0)
+        subject_comp = subject_comp.sort_values(dist1, ascending=False).head(15)
+        
+        fig = go.Figure()
+        fig.add_trace(go.Bar(name=dist1, x=subject_comp['과목명'], y=subject_comp[dist1]))
+        fig.add_trace(go.Bar(name=dist2, x=subject_comp['과목명'], y=subject_comp[dist2]))
+        fig.update_layout(barmode='group', height=400, xaxis_tickangle=-45)
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.dataframe(subject_comp, use_container_width=True)
+
 # Sidebar - Distributor Selection
 st.sidebar.header("🏢 비교할 총판 선택")
 

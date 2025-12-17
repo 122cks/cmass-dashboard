@@ -21,6 +21,123 @@ market_analysis = st.session_state.get('market_analysis', pd.DataFrame())  # 시
 st.title("🏅 등급별 총판 분석")
 st.markdown("---")
 
+# Modal for grade detail
+@st.dialog("🏅 등급 상세 정보", width="large")
+def show_grade_detail(grade):
+    """등급별 상세 정보 모달"""
+    st.subheader(f"🏅 등급: {grade}")
+    
+    order_df = st.session_state['order_df']
+    grade_col = '총판등급' if '총판등급' in order_df.columns else '등급'
+    grade_orders = order_df[order_df[grade_col] == grade].copy()
+    
+    # 기본 통계
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("총 주문 부수", f"{grade_orders['부수'].sum():,.0f}부")
+    with col2:
+        st.metric("총판 수", f"{grade_orders['총판'].nunique():,}개")
+    with col3:
+        school_col = '정보공시학교코드' if '정보공시학교코드' in grade_orders.columns else '학교코드'
+        st.metric("학교 수", f"{grade_orders[school_col].nunique():,}개")
+    with col4:
+        st.metric("과목 수", f"{grade_orders['과목명'].nunique():,}개" if '과목명' in grade_orders.columns else "N/A")
+    
+    st.markdown("---")
+    
+    # 탭으로 구분
+    detail_tab1, detail_tab2, detail_tab3 = st.tabs(["🏢 총판별 현황", "📚 과목별 분석", "🗺️ 지역별 분포"])
+    
+    with detail_tab1:
+        st.subheader("총판별 주문 현황")
+        dist_orders = grade_orders.groupby('총판').agg({
+            '부수': 'sum',
+            school_col: 'nunique'
+        }).reset_index()
+        dist_orders.columns = ['총판', '주문부수', '학교수']
+        dist_orders = dist_orders.sort_values('주문부수', ascending=False)
+        
+        fig = px.bar(
+            dist_orders.head(20),
+            x='주문부수',
+            y='총판',
+            orientation='h',
+            title="총판별 주문 TOP 20",
+            color='학교수',
+            color_continuous_scale='Plasma'
+        )
+        fig.update_layout(height=600, yaxis={'categoryorder': 'total ascending'})
+        st.plotly_chart(fig, use_container_width=True)
+        
+        st.dataframe(
+            dist_orders.style.format({
+                '주문부수': '{:,.0f}',
+                '학교수': '{:,.0f}'
+            }),
+            use_container_width=True,
+            height=300
+        )
+    
+    with detail_tab2:
+        st.subheader("과목별 주문 현황")
+        if '과목명' in grade_orders.columns:
+            subject_orders = grade_orders.groupby('과목명').agg({
+                '부수': 'sum',
+                school_col: 'nunique'
+            }).reset_index()
+            subject_orders.columns = ['과목명', '주문부수', '학교수']
+            subject_orders = subject_orders.sort_values('주문부수', ascending=False)
+            
+            fig = px.treemap(
+                subject_orders.head(20),
+                path=['과목명'],
+                values='주문부수',
+                title="과목별 주문 비중 (Tree Map)"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.dataframe(
+                subject_orders.style.format({
+                    '주문부수': '{:,.0f}',
+                    '학교수': '{:,.0f}'
+                }),
+                use_container_width=True,
+                height=300
+            )
+        else:
+            st.info("과목 정보가 없습니다.")
+    
+    with detail_tab3:
+        st.subheader("지역별 분포")
+        if '시도' in grade_orders.columns:
+            region_orders = grade_orders.groupby('시도').agg({
+                '부수': 'sum',
+                '총판': 'nunique'
+            }).reset_index()
+            region_orders.columns = ['지역', '주문부수', '총판수']
+            region_orders = region_orders.sort_values('주문부수', ascending=False)
+            
+            fig = px.bar(
+                region_orders,
+                x='지역',
+                y='주문부수',
+                title="지역별 주문 현황",
+                color='총판수',
+                color_continuous_scale='Blues'
+            )
+            fig.update_xaxis(tickangle=-45)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            st.dataframe(
+                region_orders.style.format({
+                    '주문부수': '{:,.0f}',
+                    '총판수': '{:,.0f}'
+                }),
+                use_container_width=True
+            )
+        else:
+            st.info("지역 정보가 없습니다.")
+
 # Use existing grade column from order_df
 if '총판등급' not in order_df.columns:
     st.warning("총판 등급 정보가 없습니다. 기본 분석만 제공됩니다.")
