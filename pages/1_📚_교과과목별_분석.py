@@ -24,6 +24,35 @@ market_analysis = st.session_state.get('market_analysis', pd.DataFrame())  # 시
 st.title("📚 교과/과목별 상세 분석")
 st.markdown("---")
 
+# Helper function to classify subject by school level
+def get_school_level_from_subject(subject_name):
+    """과목명으로 중학교/고등학교 구분"""
+    if pd.isna(subject_name):
+        return '미분류'
+    
+    subject_str = str(subject_name)
+    
+    # 고등학교 전용 과목 키워드
+    high_keywords = ['Ⅰ', 'Ⅱ', 'I', 'II', '기하', '확률과 통계', '미적분', 
+                     '물리학', '화학', '생명과학', '지구과학',
+                     '한국지리', '세계지리', '동아시아사', '세계사',
+                     '경제', '정치와 법', '사회·문화', '생활과 윤리', '윤리와 사상',
+                     '실용', '심화', '진로']
+    
+    for keyword in high_keywords:
+        if keyword in subject_str:
+            return '고등학교'
+    
+    # 중학교 전용 과목 키워드
+    middle_keywords = ['중학', '중등']
+    for keyword in middle_keywords:
+        if keyword in subject_str:
+            return '중학교'
+    
+    # 기본 과목 (국어, 수학, 영어, 사회, 과학, 역사 등)은 문맥으로 판단 어려우므로
+    # 학교급 정보가 있으면 그것을 사용하고, 없으면 미분류로 처리
+    return '미분류'
+
 # Modal for detailed subject info
 @st.dialog("📖 과목 상세 정보", width="large")
 def show_subject_detail(subject_name, book_code):
@@ -241,21 +270,33 @@ with tab1:
     # 과목 클릭 안내
     st.info("💡 **아래 테이블에서 과목을 클릭**하면 해당 과목의 상세 정보를 확인할 수 있습니다.")
     
+    # 학교급 구분 추가 (학교급명 컬럼이 있으면 사용, 없으면 과목명으로 추정)
+    if '학교급명' in filtered_order_df.columns:
+        # 도서코드별로 학교급명 매핑
+        book_school_level = filtered_order_df.groupby('과목명')['학교급명'].first().to_dict()
+        subject_stats['학교급'] = subject_stats['과목명'].map(book_school_level).fillna('미분류')
+    else:
+        subject_stats['학교급'] = subject_stats['과목명'].apply(get_school_level_from_subject)
+    
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        # Bar chart
+        # Bar chart with school level color coding
         fig = px.bar(
             subject_stats.head(20),
             x='과목명',
             y='주문부수',
-            title="과목별 주문 부수 TOP 20",
+            title="과목별 주문 부수 TOP 20 (🔵중학교 / 🔴고등학교)",
             text='주문부수',
-            color='주문부수',
-            color_continuous_scale='Blues'
+            color='학교급',
+            color_discrete_map={
+                '중학교': '#4A90E2',  # 파란색
+                '고등학교': '#E94B3C',  # 빨간색
+                '미분류': '#9E9E9E'  # 회색
+            }
         )
         fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-        fig.update_layout(height=500, showlegend=False)
+        fig.update_layout(height=500, showlegend=True)
         st.plotly_chart(fig, use_container_width=True)
     
     with col2:

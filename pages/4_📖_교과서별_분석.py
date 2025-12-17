@@ -15,6 +15,33 @@ order_df = st.session_state['order_df']
 st.title("📖 교과서별 상세 분석")
 st.markdown("---")
 
+# Helper function to classify subject by school level
+def get_school_level_from_subject(subject_name):
+    """과목명으로 중학교/고등학교 구분"""
+    if pd.isna(subject_name):
+        return '미분류'
+    
+    subject_str = str(subject_name)
+    
+    # 고등학교 전용 과목 키워드
+    high_keywords = ['Ⅰ', 'Ⅱ', 'I', 'II', '기하', '확률과 통계', '미적분', 
+                     '물리학', '화학', '생명과학', '지구과학',
+                     '한국지리', '세계지리', '동아시아사', '세계사',
+                     '경제', '정치와 법', '사회·문화', '생활과 윤리', '윤리와 사상',
+                     '실용', '심화', '진로']
+    
+    for keyword in high_keywords:
+        if keyword in subject_str:
+            return '고등학교'
+    
+    # 중학교 전용 과목 키워드
+    middle_keywords = ['중학', '중등']
+    for keyword in middle_keywords:
+        if keyword in subject_str:
+            return '중학교'
+    
+    return '미분류'
+
 # Sidebar Filters
 st.sidebar.header("🔍 필터 옵션")
 
@@ -90,23 +117,36 @@ with tab1:
         
         book_stats.columns = ['도서코드', '과목명', '교지명', '주문부수', '주문금액', '정가', '주문학교수']
         book_stats['시장점유율(%)'] = (book_stats['주문부수'] / book_stats['주문부수'].sum()) * 100
+        
+        # 학교급 구분 추가
+        if '학교급명' in filtered_df.columns:
+            book_school_level = filtered_df.groupby('과목명')['학교급명'].first().to_dict()
+            book_stats['학교급'] = book_stats['과목명'].map(book_school_level).fillna('미분류')
+        else:
+            book_stats['학교급'] = book_stats['과목명'].apply(get_school_level_from_subject)
+        
         book_stats = book_stats.sort_values('주문부수', ascending=False)
         
         col1, col2 = st.columns([2, 1])
         
         with col1:
-            # Top textbooks
+            # Top textbooks with school level color coding
             fig = px.bar(
                 book_stats.head(20),
                 x='과목명',
                 y='주문부수',
-                color='교지명',
-                title="TOP 20 교과서 주문 현황",
+                color='학교급',
+                title="TOP 20 교과서 주문 현황 (🔵중학교 / 🔴고등학교)",
                 text='주문부수',
+                color_discrete_map={
+                    '중학교': '#4A90E2',  # 파란색
+                    '고등학교': '#E94B3C',  # 빨간색
+                    '미분류': '#9E9E9E'  # 회색
+                },
                 barmode='group'
             )
             fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
-            fig.update_layout(height=500, xaxis_tickangle=-45)
+            fig.update_layout(height=500, xaxis_tickangle=-45, showlegend=True)
             st.plotly_chart(fig, use_container_width=True)
         
         with col2:
