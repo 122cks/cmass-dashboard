@@ -269,17 +269,22 @@ with tab1:
         st.plotly_chart(fig1, use_container_width=True)
     
     with col2:
-        # Bar chart - Order volume
-        fig2 = px.bar(
-            comparison_df,
-            x='총판',
-            y='주문부수',
-            title="총판별 주문 부수 비교",
-            text='주문부수',
-            color='주문부수',
-            color_continuous_scale='Blues'
+        # Calculate relative share (전체 대비 상대적 비중)
+        comparison_df['상대비중(%)'] = (comparison_df['주문부수'] / comparison_df['주문부수'].sum()) * 100
+        
+        # Percentage composition
+        fig2 = go.Figure()
+        fig2.add_trace(go.Pie(
+            labels=comparison_df['총판'],
+            values=comparison_df['상대비중(%)'],
+            text=comparison_df['상대비중(%)'].apply(lambda x: f'{x:.1f}%'),
+            textposition='inside',
+            hole=0.3
+        ))
+        fig2.update_layout(
+            title="총판별 상대적 주문 비중 (%)",
+            showlegend=True
         )
-        fig2.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
         st.plotly_chart(fig2, use_container_width=True)
     
     # Multi-metric comparison

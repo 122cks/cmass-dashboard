@@ -289,17 +289,23 @@ with tab1:
         st.plotly_chart(fig1, use_container_width=True)
     
     with col2:
-        # Bar chart - Total orders by grade
-        fig2 = px.bar(
-            grade_df,
-            x='등급',
-            y='주문부수',
-            title="등급별 총 주문 부수",
-            text='주문부수',
-            color='등급',
-            color_discrete_map={'S': '#FFD700', 'A': '#C0C0C0', 'B': '#CD7F32', 'C': '#4CAF50', 'D': '#2196F3', '미분류': '#9E9E9E'}
+        # Calculate relative share (전체 대비 상대적 비중)
+        grade_df['상대비중(%)'] = (grade_df['주문부수'] / grade_df['주문부수'].sum()) * 100
+        
+        # Percentage composition with donut chart
+        fig2 = go.Figure()
+        fig2.add_trace(go.Pie(
+            labels=grade_df['등급'],
+            values=grade_df['상대비중(%)'],
+            text=grade_df['상대비중(%)'].apply(lambda x: f'{x:.1f}%'),
+            textposition='inside',
+            marker=dict(colors=['#FFD700', '#C0C0C0', '#CD7F32', '#4CAF50', '#2196F3', '#9E9E9E']),
+            hole=0.4
+        ))
+        fig2.update_layout(
+            title="등급별 상대적 주문 비중 (%)",
+            showlegend=True
         )
-        fig2.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
         st.plotly_chart(fig2, use_container_width=True)
     
     # Detailed metrics table

@@ -319,15 +319,27 @@ with tab1:
             st.plotly_chart(fig, use_container_width=True)
         
         with col2:
-            # Pie chart
-            fig_pie = px.pie(
-                region_stats.head(10),
-                values='주문부수',
-                names='시도교육청',
-                title="지역별 주문 비중 TOP 10"
+            # Calculate relative share (전체 대비 상대적 비중)
+            region_stats['상대비중(%)'] = (region_stats['주문부수'] / region_stats['주문부수'].sum()) * 100
+            
+            # Stacked percentage bar chart
+            fig_relative = go.Figure()
+            fig_relative.add_trace(go.Bar(
+                x=region_stats['시도교육청'],
+                y=region_stats['상대비중(%)'],
+                text=region_stats['상대비중(%)'].apply(lambda x: f'{x:.1f}%'),
+                textposition='auto',
+                marker_color='lightblue',
+                name='상대 비중'
+            ))
+            fig_relative.update_layout(
+                title="지역별 상대적 주문 비중 (%)",
+                yaxis_title="전체 대비 비중 (%)",
+                xaxis_tickangle=-45,
+                height=500,
+                showlegend=False
             )
-            fig_pie.update_traces(textposition='inside', textinfo='percent+label')
-            st.plotly_chart(fig_pie, use_container_width=True)
+            st.plotly_chart(fig_relative, use_container_width=True)
         
         # 클릭 가능한 지역 테이블
         st.markdown("### 📋 지역별 상세 데이터 (클릭하여 상세보기)")
