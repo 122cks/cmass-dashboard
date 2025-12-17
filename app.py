@@ -99,10 +99,12 @@ def load_data():
         order_df['정보공시학교코드'] = order_df['정보공시학교코드'].astype(str)
     
     # Map distributor official names from total_df to use 총판명(공식)
-    # Create mapping: 담당총판 -> 총판명(공식)
+    # Create mapping: 담당총판 -> 총판명(공식) AND 숫자코드 -> 총판명(공식)
     if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
         # Create mapping from various distributor name formats to official name
         dist_official_map = {}
+        dist_code_map = {}  # 숫자코드 -> 총판명(공식) 매핑
+        
         for _, row in distributor_df.iterrows():
             official_name = row.get('총판명(공식)', '')
             if pd.notna(official_name):
@@ -110,15 +112,34 @@ def load_data():
                 for col in ['총판명', '총판명1']:
                     if col in distributor_df.columns and pd.notna(row.get(col)):
                         dist_official_map[str(row[col])] = official_name
+                
+                # Map from 숫자코드 (총판코드)
+                if '숫자코드' in distributor_df.columns and pd.notna(row.get('숫자코드')):
+                    code = str(int(row['숫자코드'])) if isinstance(row['숫자코드'], (int, float)) else str(row['숫자코드'])
+                    dist_code_map[code] = official_name
         
         # Update total_df's 담당총판 to use official names
         if '담당총판' in total_df.columns:
             total_df['담당총판_공식'] = total_df['담당총판'].map(lambda x: dist_official_map.get(str(x), x) if pd.notna(x) else x)
         
         # Update order_df's 총판 to use official names
+        # 1. 먼저 총판코드로 매핑 시도
+        # 2. 실패하면 총판명으로 매핑 시도
         if '총판' in order_df.columns:
             order_df['총판_원본'] = order_df['총판']
-            order_df['총판'] = order_df['총판'].map(lambda x: dist_official_map.get(str(x), x) if pd.notna(x) else x)
+            
+            # 총판코드가 있으면 코드로 먼저 매핑
+            if '총판코드' in order_df.columns:
+                order_df['총판코드_str'] = order_df['총판코드'].astype(str)
+                order_df['총판_from_code'] = order_df['총판코드_str'].map(dist_code_map)
+                # 코드 매핑 성공 시 사용, 실패 시 기존 총판명 유지
+                order_df['총판'] = order_df['총판_from_code'].fillna(
+                    order_df['총판'].map(lambda x: dist_official_map.get(str(x), x) if pd.notna(x) else x)
+                )
+                order_df.drop(columns=['총판코드_str', '총판_from_code'], inplace=True)
+            else:
+                # 총판코드가 없으면 총판명으로만 매핑
+                order_df['총판'] = order_df['총판'].map(lambda x: dist_official_map.get(str(x), x) if pd.notna(x) else x)
     
     # Merge product info to add school level to subject names
     if (not product_df.empty and '코드' in product_df.columns and '학교급' in product_df.columns
