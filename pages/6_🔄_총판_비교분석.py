@@ -532,7 +532,9 @@ with tab4:
         st.markdown("---")
         st.subheader("📋 과목별 상세 비교")
         
-        pivot_display = subject_df.pivot(index='과목명', columns='총판', values='부수').fillna(0)
+        # 중복 제거 후 pivot
+        subject_df_agg = subject_df.groupby(['과목명', '총판'])['부수'].sum().reset_index()
+        pivot_display = subject_df_agg.pivot(index='과목명', columns='총판', values='부수').fillna(0)
         pivot_display['합계'] = pivot_display.sum(axis=1)
         pivot_display = pivot_display.sort_values('합계', ascending=False)
         

@@ -345,7 +345,8 @@ with tab1:
             with col_orders:
                 st.write(f"{row['주문부수']:,.0f}부")
             with col_schools:
-                st.write(f"{row['학교수']:,.0f}개교")
+                schools_val = row.get('학교수', row.get('거래학교수', 0))
+                st.write(f"{schools_val:,.0f}개교")
             with col_share:
                 st.write(f"{row['점유율(%)']:.1f}%")
             with col_students:

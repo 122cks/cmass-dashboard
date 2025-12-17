@@ -205,19 +205,38 @@ with tab1:
     
     # 정확한 시장점유율 계산 (market_analysis 데이터 활용)
     if not market_analysis.empty and '도서코드' in market_analysis.columns:
-        # 도서코드별 시장 규모 및 점유율 계산
-        market_summary = market_analysis.groupby('도서코드').agg({
-            '주문부수': 'sum',
-            '시장규모': 'sum',
-            '과목명': 'first'
-        }).reset_index()
-        market_summary['점유율(%)'] = (market_summary['주문부수'] / market_summary['시장규모'] * 100).fillna(0)
-        
-        # subject_stats에 병합
-        if '도서코드' in subject_stats.columns:
-            subject_stats = pd.merge(
-                subject_stats,
-                market_summary[['도서코드', '시장규모', '점유율(%)']],
+        # 필요한 컬럼이 모두 있는지 확인
+        required_cols = ['도서코드', '주문부수', '시장규모', '과목명']
+        if all(col in market_analysis.columns for col in required_cols):
+            # 도서코드별 시장 규모 및 점유율 계산
+            market_summary = market_analysis.groupby('도서코드').agg({
+                '주문부수': 'sum',
+                '시장규모': 'sum',
+                '과목명': 'first'
+            }).reset_index()
+            market_summary['점유율(%)'] = (market_summary['주문부수'] / market_summary['시장규모'] * 100).fillna(0)
+            
+            # subject_stats에 병합
+            if '도서코드' in subject_stats.columns:
+                subject_stats = pd.merge(
+                    subject_stats,
+                    market_summary[['도서코드', '시장규모', '점유율(%)']],
+                    on='도서코드',
+                    how='left'
+                )
+            else:
+                subject_stats['시장규모'] = 0
+                subject_stats['점유율(%)'] = 0
+        else:
+            # Fallback: 기존 방식
+            total_students_filtered = total_df['학생수(계)'].sum()
+            subject_stats['시장규모'] = total_students_filtered
+            subject_stats['점유율(%)'] = (subject_stats['주문부수'] / total_students_filtered * 100).fillna(0)
+    else:
+        # Fallback: 기존 방식 (전체 학생수 기준)
+        total_students_filtered = total_df['학생수(계)'].sum()
+        subject_stats['시장규모'] = total_students_filtered
+        subject_stats['점유율(%)'] = (subject_stats['주문부수'] / total_students_filtered * 100).fillna(0)
                 on='도서코드',
                 how='left'
             )
