@@ -111,18 +111,17 @@ if not st.session_state['auth_ok']:
     st.markdown(
         """
         <style>
-        .pin-modal {position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0b2b3a;color:#fff;padding:24px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.5);z-index:9999;width:420px}
         .pin-display{background:#fff;color:#000;padding:12px;border-radius:8px;text-align:center;font-size:22px;margin-bottom:12px}
         .pin-btn{background:#2b7be9;color:#fff;padding:10px 12px;margin:4px;border-radius:6px;border:none;font-size:18px}
         .pin-btn-secondary{background:#6c757d}
+        .pin-container{max-width:760px;margin:32px auto;padding:20px;background:#0b2b3a;border-radius:12px}
         </style>
         """,
         unsafe_allow_html=True
     )
 
-    with st.container():
-        st.markdown('<div class="pin-modal">', unsafe_allow_html=True)
-        st.markdown('<h3 style="margin:0 0 8px 0; text-align:center;">관리자 PIN 입력</h3>', unsafe_allow_html=True)
+    st.markdown('<div class="pin-container">', unsafe_allow_html=True)
+    st.markdown('<h3 style="margin:0 0 8px 0; text-align:center; color:#fff">관리자 PIN 입력</h3>', unsafe_allow_html=True)
 
         # PIN masked display
         masked = '•' * len(st.session_state['pin_entry'])
@@ -182,7 +181,7 @@ if not st.session_state['auth_ok']:
                 'ADMIN_PIN_env': ADMIN_PIN
             })
 
-        st.markdown('</div>', unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # Prevent further page rendering until auth_ok
     st.stop()
