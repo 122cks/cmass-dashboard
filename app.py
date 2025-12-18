@@ -128,18 +128,17 @@ if not st.session_state['auth_ok']:
     st.markdown(f'<div class="pin-display">{masked or "••••"}</div>', unsafe_allow_html=True)
 
     # Numeric keypad layout
-    cols = st.columns([1,1,1])
     for r in [(1,2,3), (4,5,6), (7,8,9)]:
-            c1, c2, c3 = st.columns(3)
-            with c1:
-                if st.button(str(r[0]), key=f"d{r[0]}"):
-                    append_digit(r[0])
-            with c2:
-                if st.button(str(r[1]), key=f"d{r[1]}"):
-                    append_digit(r[1])
-            with c3:
-                if st.button(str(r[2]), key=f"d{r[2]}"):
-                    append_digit(r[2])
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            if st.button(str(r[0]), key=f"d{r[0]}"):
+                append_digit(r[0])
+        with c2:
+            if st.button(str(r[1]), key=f"d{r[1]}"):
+                append_digit(r[1])
+        with c3:
+            if st.button(str(r[2]), key=f"d{r[2]}"):
+                append_digit(r[2])
 
     c1, c2, c3 = st.columns(3)
     with c1:
@@ -152,34 +151,34 @@ if not st.session_state['auth_ok']:
         if st.button('지우기', key='clear_pin'):
             clear_pin()
 
-        # Submit button (full width)
-        if st.button('✓ 입력', key='submit_pin', use_container_width=True):
-            submit_pin()
+    # Submit button (full width)
+    if st.button('✓ 입력', key='submit_pin', use_container_width=True):
+        submit_pin()
 
-        # Emergency manual input toggle (temporary helper when keypad fails)
-        if 'manual_pin_visible' not in st.session_state:
-            st.session_state['manual_pin_visible'] = False
+    # Emergency manual input toggle (temporary helper when keypad fails)
+    if 'manual_pin_visible' not in st.session_state:
+        st.session_state['manual_pin_visible'] = False
 
-        col_m1, col_m2 = st.columns([1,3])
-        with col_m1:
-            if st.button('직접 입력(긴급)', key='manual_toggle'):
-                st.session_state['manual_pin_visible'] = not st.session_state['manual_pin_visible']
-        with col_m2:
-            if st.session_state.get('manual_pin_visible'):
-                manual_val = st.text_input('PIN 직접 입력 (긴급)', value='', type='password', key='manual_pin_input')
-                if st.button('직접 제출', key='manual_submit'):
-                    st.session_state['pin_entry'] = manual_val
-                    submit_pin()
+    col_m1, col_m2 = st.columns([1,3])
+    with col_m1:
+        if st.button('직접 입력(긴급)', key='manual_toggle'):
+            st.session_state['manual_pin_visible'] = not st.session_state['manual_pin_visible']
+    with col_m2:
+        if st.session_state.get('manual_pin_visible'):
+            manual_val = st.text_input('PIN 직접 입력 (긴급)', value='', type='password', key='manual_pin_input')
+            if st.button('직접 제출', key='manual_submit'):
+                st.session_state['pin_entry'] = manual_val
+                submit_pin()
 
-        # Debug info (temporary): show attempts and lock state for troubleshooting
-        with st.expander('디버그 상태 (임시)', expanded=False):
-            st.write({
-                'pin_entry': st.session_state.get('pin_entry'),
-                'auth_attempts': st.session_state.get('auth_attempts'),
-                'auth_lock_until': st.session_state.get('auth_lock_until'),
-                'is_locked': is_locked(),
-                'ADMIN_PIN_env': ADMIN_PIN
-            })
+    # Debug info (temporary): show attempts and lock state for troubleshooting
+    with st.expander('디버그 상태 (임시)', expanded=False):
+        st.write({
+            'pin_entry': st.session_state.get('pin_entry'),
+            'auth_attempts': st.session_state.get('auth_attempts'),
+            'auth_lock_until': st.session_state.get('auth_lock_until'),
+            'is_locked': is_locked(),
+            'ADMIN_PIN_env': ADMIN_PIN
+        })
 
     st.markdown('</div>', unsafe_allow_html=True)
 
