@@ -76,6 +76,32 @@ actual_stats = order_2026.groupby('총판').agg({
 }).reset_index()
 actual_stats.columns = ['총판', '실적부수', '거래학교수', '주문금액']
 
+# 🎯 총판코드 매핑 테이블 먼저 생성
+dist_code_map = {}  # {총판코드: 총판명(공식)}
+
+if not distributor_df.empty and '총판명(공식)' in distributor_df.columns and '총판코드' in distributor_df.columns:
+    for _, r in distributor_df.iterrows():
+        official = r.get('총판명(공식)')
+        code_val = r.get('총판코드')
+        
+        if pd.isna(official) or pd.isna(code_val):
+            continue
+        
+        official_str = str(official).strip()
+        
+        # 총판코드를 정규화 (123.0 → "123")
+        try:
+            if isinstance(code_val, (int, float)) and not pd.isna(code_val):
+                code_str = str(int(code_val)) if float(code_val).is_integer() else str(code_val).strip()
+            else:
+                code_str = str(code_val).strip()
+        except Exception:
+            code_str = str(code_val).strip()
+        
+        dist_code_map[code_str] = official_str
+
+st.sidebar.info(f"✅ 총판코드 매핑: {len(dist_code_map)}개 총판")
+
 # 목표 데이터를 총판코드로 그룹화
 if '총판코드' in target_summary.columns:
     # 총판코드 정규화
@@ -103,33 +129,6 @@ else:
         '목표2': 'sum'
     }).reset_index()
     st.sidebar.warning("⚠️ 목표 데이터에 총판코드가 없습니다!")
-
-# 🎯 총판코드만 사용한 매핑 (이름 기반 매핑 완전 제거)
-# 총판코드 → 총판명(공식) 매핑 테이블 생성
-dist_code_map = {}  # {총판코드: 총판명(공식)}
-
-if not distributor_df.empty and '총판명(공식)' in distributor_df.columns and '총판코드' in distributor_df.columns:
-    for _, r in distributor_df.iterrows():
-        official = r.get('총판명(공식)')
-        code_val = r.get('총판코드')
-        
-        if pd.isna(official) or pd.isna(code_val):
-            continue
-        
-        official_str = str(official).strip()
-        
-        # 총판코드를 정규화 (123.0 → "123")
-        try:
-            if isinstance(code_val, (int, float)) and not pd.isna(code_val):
-                code_str = str(int(code_val)) if float(code_val).is_integer() else str(code_val).strip()
-            else:
-                code_str = str(code_val).strip()
-        except Exception:
-            code_str = str(code_val).strip()
-        
-        dist_code_map[code_str] = official_str
-
-st.sidebar.info(f"✅ 총판코드 매핑: {len(dist_code_map)}개 총판")
 
 # --- 미매핑 총판 보고 (총판코드 기준)
 if '총판코드' in order_2026.columns:

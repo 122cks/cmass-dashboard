@@ -496,8 +496,10 @@ with tab2:
                 '목표과목2_달성률': '{:.1f}'
             }
             
+            # Format using compatible method
+            formatted_df = goal_data[detail_cols].copy()
             st.dataframe(
-                goal_data[detail_cols].style.format(format_dict).background_gradient(
+                formatted_df.style.format(format_dict).background_gradient(
                     subset=['목표달성률'], cmap='RdYlGn', vmin=0, vmax=200
                 ),
                 use_container_width=True
@@ -675,7 +677,7 @@ with tab5:
         ref_dist = st.selectbox("기준 총판 선택", selected_distributors, key="ref_share")
         
         # Get reference market share
-        ref_row = comparison_stats_df[comparison_stats_df['총판'] == ref_dist]
+        ref_row = comparison_df[comparison_df['총판'] == ref_dist]
         if not ref_row.empty:
             ref_share = ref_row.iloc[0]['점유율(%)']
             
@@ -790,7 +792,7 @@ with tab6:
         ref_dist2 = st.selectbox("기준 총판 선택", selected_distributors, key="ref_market")
         
         # Get reference market size
-        ref_row2 = comparison_stats_df[comparison_stats_df['총판'] == ref_dist2]
+        ref_row = comparison_df[comparison_df['총판'] == ref_dist]
         if not ref_row2.empty:
             ref_market = ref_row2.iloc[0]['시장규모']
             
