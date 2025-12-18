@@ -87,6 +87,7 @@ target_map = target_summary.groupby('총판명(공식)').agg({
 # 1) distributor_df가 있으면 공식명 매핑 테이블 생성
 # 2) order_2026에서 총판별 부수 합을 구해 공식명으로 매핑하여 실적 맵 생성
 dist_map = {}
+dist_code_map = {}
 if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
     for _, r in distributor_df.iterrows():
         official = r.get('총판명(공식)')
@@ -96,6 +97,19 @@ if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
         for col in ['총판명', '총판명1', '총판']:
             if col in distributor_df.columns and pd.notna(r.get(col)):
                 dist_map[str(r.get(col)).strip()] = str(official).strip()
+        # also map by numeric/code columns if present (숫자코드 or 총판코드)
+        for code_col in ['숫자코드', '총판코드']:
+            if code_col in distributor_df.columns and pd.notna(r.get(code_col)):
+                code_val = r.get(code_col)
+                try:
+                    # normalize numeric codes like 123.0 -> "123"
+                    if isinstance(code_val, (int, float)) and not pd.isna(code_val):
+                        code_str = str(int(code_val)) if float(code_val).is_integer() else str(code_val).strip()
+                    else:
+                        code_str = str(code_val).strip()
+                except Exception:
+                    code_str = str(code_val).strip()
+                dist_code_map[code_str] = str(official).strip()
 
 # Allow user-applied custom mappings stored in session to override dist_map
 custom_map = st.session_state.get('dist_map_custom', {}) if isinstance(st.session_state.get('dist_map_custom', {}), dict) else {}
@@ -156,9 +170,58 @@ if not unmapped.empty:
         pass
 
 # --- 이제 사용자 매핑이 적용된 dist_map 기준으로 실적 합계 계산
-order_actual = order_2026.groupby('총판')['부수'].sum().reset_index()
-order_actual['총판_key'] = order_actual['총판'].map(lambda x: dist_map.get(str(x).strip(), str(x).strip()))
+# 집계 전: 주문 행 단위에서 먼저 '총판코드'로 매핑을 시도하고, 없으면 이름으로 매핑
+order_actual_df = order_2026.copy()
+
+def _map_row_to_official(row):
+    # try code-based mapping first
+    if '총판코드' in row.index and pd.notna(row.get('총판코드')) and dist_code_map:
+        code_val = row.get('총판코드')
+        try:
+            code_str = str(int(code_val)) if isinstance(code_val, (int, float)) and float(code_val).is_integer() else str(code_val).strip()
+        except Exception:
+            code_str = str(code_val).strip()
+        if code_str in dist_code_map:
+            return dist_code_map[code_str]
+    # fallback to name-based mapping
+    name = str(row.get('총판', '')).strip()
+    return dist_map.get(name, name)
+
+# Aggregate by original identifiers then map to official names
+if '총판코드' in order_actual_df.columns:
+    agg_cols = ['총판', '총판코드']
+else:
+    agg_cols = ['총판']
+
+order_actual = order_actual_df.groupby(agg_cols)['부수'].sum().reset_index()
+order_actual['총판_key'] = order_actual.apply(_map_row_to_official, axis=1)
 actual_by_official = order_actual.groupby('총판_key')['부수'].sum().to_dict()
+
+# 추가 지표(거래학교수, 주문금액)도 동일한 방식으로 공식명 기준 집계
+metric_agg = {'부수': 'sum'}
+if school_code_col in order_actual_df.columns:
+    metric_agg[school_code_col] = 'nunique'
+if '금액' in order_actual_df.columns:
+    metric_agg['금액'] = 'sum'
+else:
+    # 금액 컬럼이 없으면 0으로 채울 수 있도록 더미 집계(부수 합계 사용)
+    metric_agg['금액'] = 'sum'
+
+order_metrics = order_actual_df.groupby(agg_cols).agg(metric_agg).reset_index()
+order_metrics['총판_key'] = order_metrics.apply(_map_row_to_official, axis=1)
+
+# 그룹핑하여 공식명 기준으로 합산
+metrics_by_official = order_metrics.groupby('총판_key').agg({
+    '부수': 'sum',
+    school_code_col: 'sum' if school_code_col in order_metrics.columns else 'sum',
+    '금액': 'sum'
+}).reset_index()
+metrics_by_official.columns = ['총판명(공식)', '실적부수_tmp', '거래학교수', '주문금액']
+
+# 실적부수는 기존 actual_by_official과 합치거나 대체
+metrics_by_official_map = metrics_by_official.set_index('총판명(공식)')['실적부수_tmp'].to_dict()
+trade_school_map = metrics_by_official.set_index('총판명(공식)')['거래학교수'].to_dict()
+order_amount_map = metrics_by_official.set_index('총판명(공식)')['주문금액'].to_dict()
 
 # 디버그: 이문당 매핑 전/후 체크
 raw_imd_sum = order_actual[order_actual['총판'].astype(str).str.contains('이문당', na=False)]['부수'].sum()
@@ -239,6 +302,9 @@ if not actual_official_df.empty:
 # Build achievement_df from target_map and map 실적부수 from actual_by_official
 achievement_df = target_map.copy()
 achievement_df['실적부수'] = achievement_df['총판명(공식)'].map(lambda x: int(actual_by_official.get(str(x).strip(), 0)))
+# 거래학교수 및 주문금액 채우기 (매핑된 값이 있으면 사용, 없으면 0)
+achievement_df['거래학교수'] = achievement_df['총판명(공식)'].map(lambda x: int(trade_school_map.get(str(x).strip(), 0)))
+achievement_df['주문금액'] = achievement_df['총판명(공식)'].map(lambda x: float(order_amount_map.get(str(x).strip(), 0)))
 
 # Fill numeric NaNs for 목표 컬럼
 for col in ['전체목표', '목표1', '목표2', '실적부수']:
