@@ -124,6 +124,9 @@ if not st.session_state['auth_ok']:
     # PIN masked display
     masked = '•' * len(st.session_state['pin_entry'])
     st.markdown(f'<div class="pin-display">{masked or "••••"}</div>', unsafe_allow_html=True)
+    
+    # DEBUG: Show actual PIN entry and click count
+    st.caption(f"🔍 실제 입력값: '{st.session_state.get('pin_entry', '')}' | 클릭수: {st.session_state.get('pin_clicks', 0)} | 마지막: {st.session_state.get('last_pin_pressed', 'N/A')}")
 
     # Numeric keypad layout
     for r in [(1,2,3), (4,5,6), (7,8,9)]:
