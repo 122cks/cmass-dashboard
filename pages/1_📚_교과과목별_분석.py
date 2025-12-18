@@ -176,11 +176,23 @@ st.sidebar.header("🔍 필터 옵션")
 
 # School Level Filter
 if '학교급명' in order_df.columns:
-    school_levels = ['전체'] + sorted(order_df['학교급명'].dropna().unique().tolist())
+    # 학교급명 고유값 확인 및 정렬
+    unique_levels = order_df['학교급명'].dropna().unique().tolist()
+    # 중학교, 고등학교 순으로 정렬
+    sorted_levels = []
+    for level in ['중학교', '고등학교']:
+        matching = [l for l in unique_levels if level in str(l)]
+        sorted_levels.extend(sorted(matching))
+    # 남은 것들 추가
+    remaining = [l for l in unique_levels if l not in sorted_levels]
+    sorted_levels.extend(sorted(remaining))
+    
+    school_levels = ['전체'] + sorted_levels
     selected_school_level = st.sidebar.selectbox("학교급 선택", school_levels)
     
     if selected_school_level != '전체':
         order_df = order_df[order_df['학교급명'] == selected_school_level].copy()
+        st.sidebar.info(f"선택된 학교급: {selected_school_level}")
 
 # Apply common filters
 filtered_order_df = apply_common_filters(order_df)

@@ -397,33 +397,32 @@ with tab1:
         if top_20.empty:
             st.info('표시할 데이터가 없습니다.')
         else:
-        
-        fig1.add_trace(go.Bar(
-            name='목표',
-            x=top_20['총판'],
-            y=top_20['전체목표'],
-            marker_color='lightblue',
-            text=top_20['전체목표'],
-            texttemplate='%{text:,.0f}',
-            textposition='outside'
-        ))
-        
-        fig1.add_trace(go.Bar(
-            name='실적',
-            x=top_20['총판'],
-            y=top_20['실적부수'],
-            marker_color='green',
-            text=top_20['실적부수'],
-            texttemplate='%{text:,.0f}',
-            textposition='outside'
-        ))
-        
-        fig1.update_layout(
-            title="목표 vs 실적 비교 TOP 20",
-            barmode='group',
-            xaxis_tickangle=-45,
-            height=500
-        )
+            fig1.add_trace(go.Bar(
+                name='목표',
+                x=top_20['총판'],
+                y=top_20['전체목표'],
+                marker_color='lightblue',
+                text=top_20['전체목표'],
+                texttemplate='%{text:,.0f}',
+                textposition='outside'
+            ))
+
+            fig1.add_trace(go.Bar(
+                name='실적',
+                x=top_20['총판'],
+                y=top_20['실적부수'],
+                marker_color='green',
+                text=top_20['실적부수'],
+                texttemplate='%{text:,.0f}',
+                textposition='outside'
+            ))
+
+            fig1.update_layout(
+                title="목표 vs 실적 비교 TOP 20",
+                barmode='group',
+                xaxis_tickangle=-45,
+                height=500
+            )
             st.plotly_chart(fig1, use_container_width=True)
     
     with col2:

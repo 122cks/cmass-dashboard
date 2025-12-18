@@ -44,11 +44,16 @@ if order_df_full is None or order_df_full.empty:
     st.stop()
 
 # 필수 컬럼 체크
-required_cols = ['학년도', '학교코드', '학교명', '제품', '부수']
+required_cols = ['학년도', '학교코드', '학교명', '부수']
 missing = [c for c in required_cols if c not in order_df_full.columns]
 if missing:
     st.error(f"필수 컬럼이 없습니다: {missing}")
     st.stop()
+
+# 과목 컬럼 확인
+subject_col = '교과서명_구분' if '교과서명_구분' in order_df_full.columns else ('과목명' if '과목명' in order_df_full.columns else None)
+if subject_col is None:
+    st.warning("과목 정보 컬럼이 없습니다.")
 
 # 학년도 필터링
 df_2025 = order_df_full[order_df_full['학년도'] == 2025].copy()
@@ -157,11 +162,10 @@ with tab1:
     
     if detail_option == '이탈 학교 리스트':
         if churned_schools:
-            churned_detail = df_2025[df_2025['학교코드'].isin(churned_schools)].groupby(['학교코드','학교명']).agg({
-                '부수': 'sum',
-                '제품': 'count'
-            }).reset_index()
-            churned_detail.columns = ['학교코드', '학교명', '2025년 부수', '주문 건수']
+            agg_dict = {'부수': 'sum', '학교명': 'first'}
+            churned_detail = df_2025[df_2025['학교코드'].isin(churned_schools)].groupby('학교코드').agg(agg_dict).reset_index()
+            churned_detail.columns = ['학교코드', '2025년 부수', '학교명']
+            churned_detail = churned_detail[['학교코드', '학교명', '2025년 부수']]
             churned_detail = churned_detail.sort_values('2025년 부수', ascending=False)
             st.dataframe(churned_detail, use_container_width=True)
             
@@ -172,11 +176,10 @@ with tab1:
             st.info("이탈 학교 없음")
     else:
         if new_schools:
-            new_detail = df_2026[df_2026['학교코드'].isin(new_schools)].groupby(['학교코드','학교명']).agg({
-                '부수': 'sum',
-                '제품': 'count'
-            }).reset_index()
-            new_detail.columns = ['학교코드', '학교명', '2026년 부수', '주문 건수']
+            agg_dict = {'부수': 'sum', '학교명': 'first'}
+            new_detail = df_2026[df_2026['학교코드'].isin(new_schools)].groupby('학교코드').agg(agg_dict).reset_index()
+            new_detail.columns = ['학교코드', '2026년 부수', '학교명']
+            new_detail = new_detail[['학교코드', '학교명', '2026년 부수']]
             new_detail = new_detail.sort_values('2026년 부수', ascending=False)
             st.dataframe(new_detail, use_container_width=True)
             
@@ -190,15 +193,15 @@ with tab1:
 with tab2:
     st.markdown("### 📚 과목별 주문 증감 분석")
     
-    if '과목' not in df_2025.columns and '과목' not in df_2026.columns:
+    if subject_col is None:
         st.warning("과목 정보가 없습니다.")
     else:
         # 2025 과목별 합계
-        subj_2025 = df_2025.groupby('과목')['부수'].sum().reset_index()
+        subj_2025 = df_2025.groupby(subject_col)['부수'].sum().reset_index()
         subj_2025.columns = ['과목', '2025년']
         
         # 2026 과목별 합계
-        subj_2026 = df_2026.groupby('과목')['부수'].sum().reset_index()
+        subj_2026 = df_2026.groupby(subject_col)['부수'].sum().reset_index()
         subj_2026.columns = ['과목', '2026년']
         
         # 병합
