@@ -217,47 +217,36 @@ def load_data():
         order_df['정보공시학교코드'] = order_df['정보공시학교코드'].astype(str)
     
     # Map distributor official names from total_df to use 총판명(공식)
-    # Create mapping: 담당총판 -> 총판명(공식) AND 숫자코드 -> 총판명(공식)
+    # Create mapping: 숫자코드(4자리) -> 총판명(공식) (이름 기반 매핑 제거)
     if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
-        # Create mapping from various distributor name formats to official name
-        dist_official_map = {}
-        dist_code_map = {}  # 숫자코드 -> 총판명(공식) 매핑
-        
-        for _, row in distributor_df.iterrows():
-            official_name = row.get('총판명(공식)', '')
-            if pd.notna(official_name):
-                # Map from 총판명, 총판명1, etc.
-                for col in ['총판명', '총판명1']:
-                    if col in distributor_df.columns and pd.notna(row.get(col)):
-                        dist_official_map[str(row[col])] = official_name
-                
-                # Map from 숫자코드 (총판코드)
-                if '숫자코드' in distributor_df.columns and pd.notna(row.get('숫자코드')):
-                    code = str(int(row['숫자코드'])) if isinstance(row['숫자코드'], (int, float)) else str(row['숫자코드'])
-                    dist_code_map[code] = official_name
-        
-        # Update total_df's 담당총판 to use official names
-        if '담당총판' in total_df.columns:
-            total_df['담당총판_공식'] = total_df['담당총판'].map(lambda x: dist_official_map.get(str(x), x) if pd.notna(x) else x)
-        
-        # Update order_df's 총판 to use official names
-        # 1. 먼저 총판코드로 매핑 시도
-        # 2. 실패하면 총판명으로 매핑 시도
-        if '총판' in order_df.columns:
-            order_df['총판_원본'] = order_df['총판']
-            
-            # 총판코드가 있으면 코드로 먼저 매핑
-            if '총판코드' in order_df.columns:
-                order_df['총판코드_str'] = order_df['총판코드'].astype(str)
-                order_df['총판_from_code'] = order_df['총판코드_str'].map(dist_code_map)
-                # 코드 매핑 성공 시 사용, 실패 시 기존 총판명 유지
-                order_df['총판'] = order_df['총판_from_code'].fillna(
-                    order_df['총판'].map(lambda x: dist_official_map.get(str(x), x) if pd.notna(x) else x)
-                )
-                order_df.drop(columns=['총판코드_str', '총판_from_code'], inplace=True)
-            else:
-                # 총판코드가 없으면 총판명으로만 매핑
-                order_df['총판'] = order_df['총판'].map(lambda x: dist_official_map.get(str(x), x) if pd.notna(x) else x)
+        code_columns = [c for c in ['총판코드', '숫자코드'] if c in distributor_df.columns]
+        dist_code_map = {}
+        if code_columns:
+            code_col = code_columns[0]
+            for _, row in distributor_df.iterrows():
+                official_name = row.get('총판명(공식)')
+                code_val = row.get(code_col)
+                if pd.isna(official_name) or pd.isna(code_val):
+                    continue
+                # 코드 정규화: 123.0 -> "123" / 문자열은 strip
+                try:
+                    if isinstance(code_val, (int, float)) and not pd.isna(code_val):
+                        code_str = str(int(code_val)) if float(code_val).is_integer() else str(code_val).strip()
+                    else:
+                        code_str = str(code_val).strip()
+                except Exception:
+                    code_str = str(code_val).strip()
+                dist_code_map[code_str] = str(official_name).strip()
+
+        # 주문 데이터 총판명은 '총판코드'로만 매핑 (이름 기반 매핑 제거)
+        if '총판' in order_df.columns and '총판코드' in order_df.columns and dist_code_map:
+            order_df['총판코드_정규화'] = order_df['총판코드'].apply(lambda x: 
+                str(int(x)) if isinstance(x, (int, float)) and not pd.isna(x) and float(x).is_integer() 
+                else str(x).strip() if pd.notna(x) else '')
+            order_df['총판'] = order_df['총판코드_정규화'].map(dist_code_map).fillna(order_df['총판'])
+            # 매핑 딕셔너리 세션 저장 (코드 -> 공식명, 공식명 -> 코드)
+            st.session_state['code_to_official'] = dist_code_map
+            st.session_state['official_to_code'] = {v: k for k, v in dist_code_map.items()}
     
     # Merge product info to add school level to subject names
     if (not product_df.empty and '코드' in product_df.columns and '학교급' in product_df.columns

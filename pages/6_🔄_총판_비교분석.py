@@ -163,29 +163,49 @@ with tab1:
         }
         stats['학교당평균'] = stats['주문부수'] / stats['거래학교수'] if stats['거래학교수'] > 0 else 0
         
-        # Get target and grade info from distributor_df
-        if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
-            # Match by official name
-            dist_info = distributor_df[distributor_df['총판명(공식)'] == dist]
-            if dist_info.empty:
-                # Try partial match
-                pattern = (dist.split(')')[-1].strip() if ')' in dist else str(dist).strip())
-                dist_info = distributor_df[distributor_df['총판명(공식)'].str.contains(pattern, na=False, regex=False)]
-            if not dist_info.empty:
-                stats['등급'] = dist_info.iloc[0].get('등급', '-')
+        # Get target and grade info from distributor_df (코드 기반 매칭)
+        if not distributor_df.empty:
+            dist_rows = order_df[order_df['총판'] == dist]
+            dist_code = None
+            if '총판코드_정규화' in dist_rows.columns and not dist_rows.empty:
+                codes = dist_rows['총판코드_정규화'].dropna().astype(str)
+                dist_code = codes.mode().iloc[0] if not codes.empty else None
+            # distributor_df에서 코드 정규화 후 매칭
+            code_col = '총판코드' if '총판코드' in distributor_df.columns else ('숫자코드' if '숫자코드' in distributor_df.columns else None)
+            if code_col and dist_code is not None:
+                df_tmp = distributor_df.copy()
+                try:
+                    df_tmp['__code_norm'] = df_tmp[code_col].apply(lambda x: str(int(x)) if isinstance(x, (int,float)) and not pd.isna(x) and float(x).is_integer() else str(x).strip() if pd.notna(x) else '')
+                except Exception:
+                    df_tmp['__code_norm'] = df_tmp[code_col].astype(str).str.strip()
+                dist_info = df_tmp[df_tmp['__code_norm'] == dist_code]
+                if not dist_info.empty:
+                    stats['등급'] = dist_info.iloc[0].get('등급', '-')
+                else:
+                    stats['등급'] = '-'
             else:
                 stats['등급'] = '-'
         else:
             stats['등급'] = '-'
         
         # Get target from target_df and calculate achievement by target subject
-        if not target_df.empty and '총판명(공식)' in target_df.columns:
-            # Try matching with official name
-            target_info = target_df[target_df['총판명(공식)'] == dist]
-            if target_info.empty:
-                # Try partial match
-                dist_name = dist.split(')')[-1] if ')' in dist else dist
-                target_info = target_df[target_df['총판명(공식)'].str.contains(dist_name, na=False, regex=False)]
+        if not target_df.empty:
+            # 코드 기준 매칭
+            dist_rows = order_df[order_df['총판'] == dist]
+            dist_code = None
+            if '총판코드_정규화' in dist_rows.columns and not dist_rows.empty:
+                codes = dist_rows['총판코드_정규화'].dropna().astype(str)
+                dist_code = codes.mode().iloc[0] if not codes.empty else None
+            code_col = '총판코드' if '총판코드' in target_df.columns else None
+            if code_col and dist_code is not None:
+                tmp = target_df.copy()
+                try:
+                    tmp['__code_norm'] = tmp[code_col].apply(lambda x: str(int(x)) if isinstance(x, (int,float)) and not pd.isna(x) and float(x).is_integer() else str(x).strip() if pd.notna(x) else '')
+                except Exception:
+                    tmp['__code_norm'] = tmp[code_col].astype(str).str.strip()
+                target_info = tmp[tmp['__code_norm'] == dist_code]
+            else:
+                target_info = pd.DataFrame()
             
             if not target_info.empty:
                 target_row = target_info.iloc[0]
@@ -689,8 +709,17 @@ with tab5:
                 school_code_col = '정보공시학교코드' if '정보공시학교코드' in dist_data.columns else '학교코드'
                 
                 # Get market size from distributor_market
-                pattern = (dist.split(')')[-1].strip() if ')' in dist else str(dist).strip())
-                dist_market_row = distributor_market[distributor_market['총판명(공식)'].str.contains(pattern, na=False, regex=False)]
+                # 코드 기반으로 distributor_market 매칭 (세션의 code_to_official 사용)
+                dist_rows2 = order_df[order_df['총판'] == dist]
+                dist_code2 = None
+                if '총판코드_정규화' in dist_rows2.columns and not dist_rows2.empty:
+                    codes2 = dist_rows2['총판코드_정규화'].dropna().astype(str)
+                    dist_code2 = codes2.mode().iloc[0] if not codes2.empty else None
+                official = st.session_state.get('code_to_official', {}).get(dist_code2)
+                if official:
+                    dist_market_row = distributor_market[distributor_market['총판명(공식)'] == official]
+                else:
+                    dist_market_row = pd.DataFrame()
                 if not dist_market_row.empty:
                     market_size = dist_market_row.iloc[0]['시장규모']
                 else:
@@ -805,8 +834,16 @@ with tab6:
                 school_code_col = '정보공시학교코드' if '정보공시학교코드' in dist_data.columns else '학교코드'
                 
                 # Get market size
-                pattern = (dist.split(')')[-1].strip() if ')' in dist else str(dist).strip())
-                dist_market_row = distributor_market[distributor_market['총판명(공식)'].str.contains(pattern, na=False, regex=False)]
+                dist_rows3 = order_df[order_df['총판'] == dist]
+                dist_code3 = None
+                if '총판코드_정규화' in dist_rows3.columns and not dist_rows3.empty:
+                    codes3 = dist_rows3['총판코드_정규화'].dropna().astype(str)
+                    dist_code3 = codes3.mode().iloc[0] if not codes3.empty else None
+                official = st.session_state.get('code_to_official', {}).get(dist_code3)
+                if official:
+                    dist_market_row = distributor_market[distributor_market['총판명(공식)'] == official]
+                else:
+                    dist_market_row = pd.DataFrame()
                 if not dist_market_row.empty:
                     market_size = dist_market_row.iloc[0]['시장규모']
                 else:

@@ -15,13 +15,13 @@ order_df = pd.DataFrame({
 patterns = ['통영)이문당', '통영) 이문당', '이문당', 'XYZ']
 
 for dist in patterns:
-    pattern = dist.split(')')[-1] if ')' in dist else dist
+    pattern = (dist.split(')')[-1].strip() if ')' in dist else str(dist).strip()
     # using literal match (regex=False)
     matches = distributor_market[distributor_market['총판명(공식)'].str.contains(pattern, na=False, regex=False)]
     print(f"Dist: {dist!r} -> pattern: {pattern!r} -> matches:\n{matches}\n")
 
 # Also test when using regex (should behave similar for simple strings)
 for dist in patterns:
-    pattern = dist.split(')')[-1] if ')' in dist else dist
+    pattern = (dist.split(')')[-1].strip() if ')' in dist else str(dist).strip()
     matches_re = distributor_market[distributor_market['총판명(공식)'].str.contains(pattern, na=False, regex=True)]
     print(f"(regex) Dist: {dist!r} -> pattern: {pattern!r} -> matches:\n{matches_re}\n")
