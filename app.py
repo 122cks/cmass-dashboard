@@ -53,11 +53,9 @@ import time
 
 def clear_pin():
     st.session_state['pin_entry'] = ''
-    st.rerun()
 
 def backspace_pin():
     st.session_state['pin_entry'] = st.session_state['pin_entry'][:-1]
-    st.rerun()
 
 def append_digit(d):
     if len(st.session_state['pin_entry']) < 6:
@@ -65,7 +63,6 @@ def append_digit(d):
         # debug: record last pressed and increment click counter
         st.session_state['last_pin_pressed'] = d
         st.session_state['pin_clicks'] = st.session_state.get('pin_clicks', 0) + 1
-        st.rerun()
 
 def submit_pin():
     entered = st.session_state.get('pin_entry', '').strip()
@@ -74,12 +71,10 @@ def submit_pin():
         st.session_state['auth_ok'] = True
         st.session_state['auth_attempts'] = 0
         st.session_state['auth_lock_until'] = None
-        st.rerun()
     else:
         st.session_state['auth_attempts'] += 1
         if st.session_state['auth_attempts'] >= MAX_ATTEMPTS:
             st.session_state['auth_lock_until'] = time.time() + LOCKOUT_SECONDS
-        st.error("PIN이 올바르지 않습니다. 남은 시도: {}".format(max(0, MAX_ATTEMPTS - st.session_state['auth_attempts'])))
         st.session_state['pin_entry'] = ''
 
 def is_locked():
@@ -101,11 +96,11 @@ if not st.session_state['auth_ok']:
 
         col_a, col_b = st.columns([1,3])
         with col_a:
-            if st.button('세션 초기화', help='현재 브라우저 세션의 잠금을 해제합니다.'):
+            def reset_session():
                 st.session_state['auth_attempts'] = 0
                 st.session_state['auth_lock_until'] = None
                 st.session_state['pin_entry'] = ''
-                st.rerun()
+            st.button('세션 초기화', help='현재 브라우저 세션의 잠금을 해제합니다.', on_click=reset_session)
         with col_b:
             st.caption('잠금이 계속되면 시크릿 창에서 접속하거나, 관리자 환경변수로 PIN 잠금을 끌 수 있습니다(PIN_MAX_ATTEMPTS<=0 또는 PIN_LOCKOUT_SECONDS<=0).')
         st.stop()
@@ -134,38 +129,37 @@ if not st.session_state['auth_ok']:
     for r in [(1,2,3), (4,5,6), (7,8,9)]:
         c1, c2, c3 = st.columns(3)
         with c1:
-            if st.button(str(r[0]), key=f"pin_d{r[0]}"):
-                append_digit(r[0])
+            st.button(str(r[0]), key=f"pin_d{r[0]}", on_click=append_digit, args=(r[0],))
         with c2:
-            if st.button(str(r[1]), key=f"pin_d{r[1]}"):
-                append_digit(r[1])
+            st.button(str(r[1]), key=f"pin_d{r[1]}", on_click=append_digit, args=(r[1],))
         with c3:
-            if st.button(str(r[2]), key=f"pin_d{r[2]}"):
-                append_digit(r[2])
+            st.button(str(r[2]), key=f"pin_d{r[2]}", on_click=append_digit, args=(r[2],))
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        if st.button('⌫', key='pin_backspace'):
-            backspace_pin()
+        st.button('⌫', key='pin_backspace', on_click=backspace_pin)
     with c2:
-        if st.button('0', key='pin_d0'):
-            append_digit(0)
+        st.button('0', key='pin_d0', on_click=append_digit, args=(0,))
     with c3:
-        if st.button('지우기', key='pin_clear'):
-            clear_pin()
+        st.button('지우기', key='pin_clear', on_click=clear_pin)
 
     # Submit button (full width)
-    if st.button('✓ 입력', key='pin_submit', use_container_width=True):
-        submit_pin()
+    st.button('✓ 입력', key='pin_submit', use_container_width=True, on_click=submit_pin)
+    
+    # Show error message if last attempt failed
+    if st.session_state['auth_attempts'] > 0 and not st.session_state['auth_ok']:
+        st.error(f"PIN이 올바르지 않습니다. 남은 시도: {max(0, MAX_ATTEMPTS - st.session_state['auth_attempts'])}")
 
     # Emergency manual input toggle (temporary helper when keypad fails)
     if 'manual_pin_visible' not in st.session_state:
         st.session_state['manual_pin_visible'] = False
 
+    def toggle_manual():
+        st.session_state['manual_pin_visible'] = not st.session_state['manual_pin_visible']
+
     col_m1, col_m2 = st.columns([1,3])
     with col_m1:
-        if st.button('직접 입력(긴급)', key='pin_manual_toggle'):
-            st.session_state['manual_pin_visible'] = not st.session_state['manual_pin_visible']
+        st.button('직접 입력(긴급)', key='pin_manual_toggle', on_click=toggle_manual)
     with col_m2:
         if st.session_state.get('manual_pin_visible'):
             manual_val = st.text_input('PIN 직접 입력 (긴급)', value='', type='password', key='manual_pin_input')
