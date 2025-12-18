@@ -55,13 +55,16 @@ import time
 
 def clear_pin():
     st.session_state['pin_entry'] = ''
+    st.rerun()
 
 def backspace_pin():
     st.session_state['pin_entry'] = st.session_state['pin_entry'][:-1]
+    st.rerun()
 
 def append_digit(d):
     if len(st.session_state['pin_entry']) < 6:
         st.session_state['pin_entry'] += str(d)
+        st.rerun()
 
 def submit_pin():
     entered = st.session_state.get('pin_entry', '').strip()
