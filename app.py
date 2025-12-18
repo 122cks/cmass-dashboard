@@ -41,7 +41,7 @@ if not st.session_state['auth_ok']:
     if pwd:
         if pwd.strip() == '2274':
             st.session_state['auth_ok'] = True
-            st.experimental_rerun()
+            st.rerun()
         else:
             st.error("비밀번호가 올바르지 않습니다.")
             st.stop()
@@ -263,9 +263,8 @@ def load_data():
 try:
     total_df, order_df, target_df, product_df, distributor_df, market_analysis, market_size_by_level, distributor_market, subject_market_by_dist = load_data()
     
-    # 🚨 중요: 실적 계산용 order_df는 2026년도 + 목표과목1/2만 사용
-    # 원본은 보관하고, 필터된 버전을 별도로 생성
-    order_df_original = order_df.copy()
+    # 🚨 중요: 목표 관련 페이지(목표 대비 달성률, 등급별 분석)에서만 목표과목 필터 사용
+    # 나머지 페이지는 전체 데이터 사용
     
     # 목표과목 컬럼 확인 (목표과목 또는 2026 목표과목)
     target_col = None
@@ -274,21 +273,20 @@ try:
     elif '2026 목표과목' in order_df.columns:
         target_col = '2026 목표과목'
     
-    # 2026년도 + 목표과목1/2 필터 적용
+    # 목표과목 필터링된 데이터 생성 (목표 관련 페이지용)
     if '학년도' in order_df.columns and target_col is not None:
-        order_df_filtered = order_df[
+        order_df_target_filtered = order_df[
             (order_df['학년도'] == 2026) & 
             (order_df[target_col].isin(['목표과목1', '목표과목2']))
         ].copy()
-        st.sidebar.success(f"✅ 실적 필터 적용: 전체 {len(order_df):,}건 → 2026년도 목표과목1/2: {len(order_df_filtered):,}건 ({int(order_df_filtered['부수'].sum()):,}부)")
     else:
-        order_df_filtered = order_df[order_df['학년도'] == 2026].copy() if '학년도' in order_df.columns else order_df.copy()
-        st.sidebar.warning(f"⚠️ 목표과목 컬럼 없음 - 2026년도 전체 사용: {len(order_df_filtered):,}건")
+        order_df_target_filtered = order_df[order_df['학년도'] == 2026].copy() if '학년도' in order_df.columns else order_df.copy()
     
     # Store in session state for access across pages
     st.session_state['total_df'] = total_df
-    st.session_state['order_df'] = order_df_filtered  # 🚨 필터된 데이터를 세션에 저장!
-    st.session_state['order_df_original'] = order_df_original  # 원본은 별도 보관
+    st.session_state['order_df'] = order_df  # 🚨 전체 데이터를 기본으로 저장 (모든 페이지에서 사용)
+    st.session_state['order_df_original'] = order_df  # 원본 전체 데이터
+    st.session_state['order_df_target_filtered'] = order_df_target_filtered  # 목표과목 필터된 데이터 (목표 관련 페이지용)
     st.session_state['target_df'] = target_df
     st.session_state['product_df'] = product_df
     st.session_state['distributor_df'] = distributor_df

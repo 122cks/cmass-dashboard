@@ -11,7 +11,8 @@ if 'order_df' not in st.session_state:
     st.error("데이터를 불러올 수 없습니다. 메인 페이지로 돌아가주세요.")
     st.stop()
 
-order_df = st.session_state['order_df'].copy()
+# 🚨 등급별 분석은 목표과목 필터된 데이터 사용
+order_df = st.session_state.get('order_df_target_filtered', st.session_state['order_df']).copy()
 distributor_df = st.session_state.get('distributor_df', pd.DataFrame())
 target_df = st.session_state.get('target_df', pd.DataFrame())
 sort_by_grade = st.session_state.get('sort_by_grade', None)
@@ -27,7 +28,7 @@ def show_grade_detail(grade):
     """등급별 상세 정보 모달"""
     st.subheader(f"🏅 등급: {grade}")
     
-    order_df = st.session_state['order_df']
+    order_df = st.session_state.get('order_df_target_filtered', st.session_state['order_df'])
     grade_col = '총판등급' if '총판등급' in order_df.columns else '등급'
     grade_orders = order_df[order_df[grade_col] == grade].copy()
     

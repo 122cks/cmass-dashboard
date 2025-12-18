@@ -11,7 +11,8 @@ if 'order_df' not in st.session_state:
     st.error("데이터를 불러올 수 없습니다. 메인 페이지로 돌아가주세요.")
     st.stop()
 
-order_df = st.session_state['order_df'].copy()
+# 🚨 목표 대비 달성률은 목표과목 필터된 데이터 사용
+order_df = st.session_state.get('order_df_target_filtered', st.session_state['order_df']).copy()
 target_df = st.session_state.get('target_df', pd.DataFrame())
 distributor_df = st.session_state.get('distributor_df', pd.DataFrame())
 
@@ -45,39 +46,12 @@ else:
 # 총판별 실적 집계 - 2026년도 목표과목1, 목표과목2만
 st.info("💡 목표는 2026년도 기준이므로, 2026년도 목표과목1·목표과목2 주문만 집계하여 달성률을 계산합니다.")
 
-# 🚨 반드시 원본 주문 데이터에서 직접 필터링 (세션 order_df가 이미 필터됐을 수도 있으므로)
-if 'order_df_original' in st.session_state:
-    source_df = st.session_state['order_df_original'].copy()
-else:
-    # fallback: 현재 세션 order_df가 원본이라고 가정
-    source_df = order_df.copy()
+# order_df는 이미 목표과목 필터된 데이터이므로 바로 사용
+order_2026 = order_df.copy()
 
-st.sidebar.success(f"✅ 원본 데이터 사용: {len(source_df):,}건")
-
-school_code_col = '정보공시학교코드' if '정보공시학교코드' in source_df.columns else '학교코드'
-
-# 목표과목 컬럼 탐색
-target_col = None
-for col in source_df.columns:
-    if '목표과목' in str(col):
-        target_col = col
-        break
-
-if target_col is None:
-    st.error("❌ 목표과목 컬럼을 찾을 수 없습니다. CSV 파일에 '목표과목' 컬럼이 필요합니다.")
-    st.stop()
-
-# 2026년도 + 목표과목1/2 필터 적용
-if '학년도' in source_df.columns:
-    order_2026 = source_df[
-        (source_df['학년도'] == 2026) & 
-        (source_df[target_col].isin(['목표과목1', '목표과목2']))
-    ].copy()
-else:
-    order_2026 = source_df[source_df[target_col].isin(['목표과목1', '목표과목2'])].copy()
+school_code_col = '정보공시학교코드' if '정보공시학교코드' in order_2026.columns else '학교코드'
 
 # 디버깅: 필터링 결과 확인
-st.sidebar.write(f"📦 원본 데이터: {len(source_df):,}건 ({int(source_df['부수'].sum()):,}부)")
 st.sidebar.write(f"✅ 2026+목표과목1/2: {len(order_2026):,}건 ({int(order_2026['부수'].sum()):,}부)")
 test_imd = order_2026[order_2026['총판'].str.contains('이문당', na=False)]
 if len(test_imd) > 0:
@@ -177,7 +151,7 @@ if not unmapped.empty:
                 existing = st.session_state.get('dist_map_custom', {})
                 existing.update(to_apply)
                 st.session_state['dist_map_custom'] = existing
-                st.experimental_rerun()
+                st.rerun()
     except Exception:
         pass
 
@@ -198,11 +172,11 @@ elif '이문당' in actual_by_official:
 
 # 세션 초기화 버튼 (세션 캐시 문제로 인해 UI가 갱신되지 않을 때 사용)
 if st.sidebar.button('🔁 세션 초기화 및 재실행'):
-    keys_to_clear = ['order_df', 'order_df_original', 'target_df', 'distributor_df']
+    keys_to_clear = ['order_df', 'order_df_original', 'target_df', 'distributor_df', 'order_df_target_filtered']
     for k in keys_to_clear:
         if k in st.session_state:
             del st.session_state[k]
-    st.experimental_rerun()
+    st.rerun()
 
 # --- 총판 매핑 상세 디버그: 어떤 원본 이름들이 특정 공식명으로 합쳐졌는지 확인
 reverse_map = {}
