@@ -356,6 +356,23 @@ if not distributor_df.empty and '총판명(공식)' in distributor_df.columns an
 else:
     achievement_df['등급'] = '미분류'
 
+# 학생수 기반 시장규모 및 점유율 추가
+distributor_market = st.session_state.get('distributor_market', pd.DataFrame())
+if not distributor_market.empty and '총판명(공식)' in distributor_market.columns:
+    # 시장규모 매핑
+    market_size_map = distributor_market.set_index('총판명(공식)')['시장규모'].to_dict()
+    achievement_df['시장규모'] = achievement_df['총판'].map(market_size_map).fillna(0)
+    # 점유율 계산
+    achievement_df['점유율(%)'] = achievement_df.apply(
+        lambda row: (row['실적부수'] / row['시장규모'] * 100) if row['시장규모'] > 0 else 0,
+        axis=1
+    )
+else:
+    # Fallback: 전체 학생수 기반
+    total_students = st.session_state.get('total_df', pd.DataFrame())['학생수(계)'].sum() if 'total_df' in st.session_state else 0
+    achievement_df['시장규모'] = total_students
+    achievement_df['점유율(%)'] = (achievement_df['실적부수'] / total_students * 100) if total_students > 0 else 0
+
 # 목표가 있는 총판만 필터링
 achievement_df = achievement_df[achievement_df['전체목표'] > 0]
 
@@ -395,7 +412,7 @@ st.sidebar.markdown("---")
 st.sidebar.info(f"📊 분석 대상 총판: {len(achievement_df)}개")
 
 # Main Metrics
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
     total_target = achievement_df['전체목표'].sum()
@@ -411,6 +428,12 @@ with col3:
              delta=f"{total_actual - total_target:,.0f}부")
 
 with col4:
+    total_market = achievement_df['시장규모'].sum()
+    overall_share = (total_actual / total_market * 100) if total_market > 0 else 0
+    st.metric("학생수 대비 점유율", f"{overall_share:.2f}%",
+             help="담당 학교 학생수(중등/고등 1,2학년) 대비 주문 비율")
+
+with col5:
     achieved_count = len(achievement_df[achievement_df['전체달성률(%)'] >= 100])
     st.metric("목표 달성 총판", f"{achieved_count}/{len(achievement_df)}개")
 
@@ -639,7 +662,7 @@ with tab4:
     
     display_df = achievement_df[[
         '순위', '총판', '등급', '전체목표', '실적부수', '전체달성률(%)', 
-        '차이', '거래학교수', '주문금액'
+        '차이', '시장규모', '점유율(%)', '거래학교수', '주문금액'
     ]].copy()
     
     st.dataframe(
@@ -657,6 +680,8 @@ with tab4:
                 max_value=100,
             ),
             "차이": st.column_config.NumberColumn("차이 (실적-목표)", format="%d부"),
+            "시장규모": st.column_config.NumberColumn("시장규모 (학생수)", format="%d명"),
+            "점유율(%)": st.column_config.NumberColumn("학생수 대비 점유율", format="%.2f%%"),
             "거래학교수": st.column_config.NumberColumn("거래 학교", format="%d개교"),
             "주문금액": st.column_config.NumberColumn("주문 금액", format="₩%d"),
         },

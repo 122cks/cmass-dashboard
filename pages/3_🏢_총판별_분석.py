@@ -220,6 +220,34 @@ if '총판' in filtered_order_df.columns:
         dist_stats['판매비중(%)'] = (dist_stats['주문부수'] / dist_stats['주문부수'].sum()) * 100
         dist_stats['학교당평균'] = dist_stats['주문부수'] / dist_stats['거래학교수']
         
+        # 학생수 기반 시장규모 및 점유율 추가
+        distributor_market = st.session_state.get('distributor_market', pd.DataFrame())
+        if not distributor_market.empty and '총판명(공식)' in distributor_market.columns:
+            # 총판명 매핑 (공식명으로)
+            market_map = distributor_market.set_index('총판명(공식)')[['시장규모', '주문부수']].to_dict('index')
+            
+            def get_market_data(dist_name):
+                # 정확한 이름 매치
+                if dist_name in market_map:
+                    return market_map[dist_name]
+                # 부분 매치 (괄호 뒤 이름)
+                dist_short = dist_name.split(')')[-1] if ')' in dist_name else dist_name
+                for official_name in market_map.keys():
+                    if dist_short in official_name or official_name.endswith(dist_short):
+                        return market_map[official_name]
+                return {'시장규모': 0, '주문부수': 0}
+            
+            dist_stats['시장규모'] = dist_stats['총판'].apply(lambda x: get_market_data(x)['시장규모'])
+            dist_stats['점유율(%)'] = dist_stats.apply(
+                lambda row: (row['주문부수'] / row['시장규모'] * 100) if row['시장규모'] > 0 else 0,
+                axis=1
+            )
+        else:
+            # Fallback: 전체 학생수 기반
+            total_students = st.session_state.get('total_df', pd.DataFrame())['학생수(계)'].sum()
+            dist_stats['시장규모'] = total_students
+            dist_stats['점유율(%)'] = (dist_stats['주문부수'] / total_students * 100) if total_students > 0 else 0
+        
         # 목표 데이터 병합 (목표1 + 목표2)
         if not target_df.empty and '총판명(공식)' in target_df.columns:
             # 목표1 부수와 목표2 부수 합산하여 전체 목표 계산
@@ -253,15 +281,16 @@ if '총판' in filtered_order_df.columns:
         col1, col2 = st.columns([2, 1])
         
         with col1:
-            # 점유율 차트로 변경 (기본 표시)
+            # 학생수 기반 점유율 차트
             fig = px.bar(
                 dist_stats.head(20),
                 x='총판',
-                y='판매비중(%)',
-                title="총판별 시장 점유율 TOP 20 (%)",
-                text='판매비중(%)',
-                color='판매비중(%)',
-                color_continuous_scale='Greens'
+                y='점유율(%)',
+                title="총판별 학생수 대비 점유율 TOP 20 (담당 학교 학생수 기준)",
+                text='점유율(%)',
+                color='점유율(%)',
+                color_continuous_scale='Blues',
+                hover_data=['주문부수', '시장규모', '거래학교수']
             )
             fig.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
             fig.update_layout(height=500, xaxis_tickangle=-45, showlegend=False, yaxis_title="점유율 (%)")
@@ -295,7 +324,8 @@ if '총판' in filtered_order_df.columns:
             with col_schools:
                 st.write(f"{row['거래학교수']:,.0f}개교")
             with col_share:
-                st.write(f"{row['판매비중(%)']:.1f}%")
+                market_share = row.get('점유율(%)', row.get('판매비중(%)', 0))
+                st.write(f"{market_share:.2f}% (학생수 대비)")
         
         # Market share visualization
         st.markdown("---")
