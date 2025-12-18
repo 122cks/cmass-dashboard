@@ -130,26 +130,18 @@ if not st.session_state['auth_ok']:
 
         c1, c2, c3 = st.columns(3)
         with c1:
+            if st.button('⌫', key='backspace'):
+                backspace_pin()
+        with c2:
             if st.button('0', key='d0'):
                 append_digit(0)
-        with c2:
-            if st.button('입력', key='submit_pin'):
-                submit_pin()
         with c3:
             if st.button('지우기', key='clear_pin'):
                 clear_pin()
 
-        # Backspace and manual input fallback
-        back_col, manual_col = st.columns([1,3])
-        with back_col:
-            if st.button('⌫', key='backspace'):
-                backspace_pin()
-        with manual_col:
-            manual = st.text_input('직접 입력 (숫자 4자리)', value='', type='password', key='manual_pin')
-            if manual:
-                # 직접 입력 제출 시 pin_entry로 옮겨서 검증
-                st.session_state['pin_entry'] = manual
-                submit_pin()
+        # Submit button (full width)
+        if st.button('✓ 입력', key='submit_pin', use_container_width=True):
+            submit_pin()
 
         st.markdown('</div>', unsafe_allow_html=True)
 
