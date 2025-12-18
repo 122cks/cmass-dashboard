@@ -584,6 +584,9 @@ with tab2:
 
 with tab3:
     st.subheader("📈 등급별 달성률 분석")
+    # grade_achievement 변수를 항상 정의하여 이후 코드에서 NameError 발생을 방지
+    grade_columns = ['등급', '목표합계', '실적합계', '시장규모', '거래학교수', '총판수', '평균달성률(%)', '점유율(%)', '총판당평균실적']
+    grade_achievement = pd.DataFrame(columns=grade_columns)
     
     if '등급' not in achievement_df.columns or achievement_df['등급'].isna().all():
         st.warning("등급 정보가 없습니다. 총판정보.csv에 등급 컬럼이 있는지 확인해주세요.")

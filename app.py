@@ -123,13 +123,13 @@ if not st.session_state['auth_ok']:
     st.markdown('<div class="pin-container">', unsafe_allow_html=True)
     st.markdown('<h3 style="margin:0 0 8px 0; text-align:center; color:#fff">관리자 PIN 입력</h3>', unsafe_allow_html=True)
 
-        # PIN masked display
-        masked = '•' * len(st.session_state['pin_entry'])
-        st.markdown(f'<div class="pin-display">{masked or "••••"}</div>', unsafe_allow_html=True)
+    # PIN masked display
+    masked = '•' * len(st.session_state['pin_entry'])
+    st.markdown(f'<div class="pin-display">{masked or "••••"}</div>', unsafe_allow_html=True)
 
-        # Numeric keypad layout
-        cols = st.columns([1,1,1])
-        for r in [(1,2,3), (4,5,6), (7,8,9)]:
+    # Numeric keypad layout
+    cols = st.columns([1,1,1])
+    for r in [(1,2,3), (4,5,6), (7,8,9)]:
             c1, c2, c3 = st.columns(3)
             with c1:
                 if st.button(str(r[0]), key=f"d{r[0]}"):

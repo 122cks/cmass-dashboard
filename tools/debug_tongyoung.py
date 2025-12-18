@@ -40,7 +40,7 @@ for name in imd_all['총판'].unique():
 
 print(f'\n통영)이문당 2026 전체 합계: {int(imd_all["부수"].sum()):,}부')
 
-    imd_filtered = ord_filtered[ord_filtered['총판'].str.contains('이문당', na=False, regex=False)]
+imd_filtered = ord_filtered[ord_filtered['총판'].str.contains('이문당', na=False, regex=False)]
 print(f'통영)이문당 2026 목표과목1/2 합계: {int(imd_filtered["부수"].sum()):,}부')
 
 # 총판정보에서 공식명 확인
