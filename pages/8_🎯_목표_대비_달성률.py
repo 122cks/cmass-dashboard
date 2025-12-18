@@ -76,156 +76,115 @@ actual_stats = order_2026.groupby('총판').agg({
 }).reset_index()
 actual_stats.columns = ['총판', '실적부수', '거래학교수', '주문금액']
 
-# 목표와 실적 병합
-target_map = target_summary.groupby('총판명(공식)').agg({
-    '전체목표': 'sum',
-    '목표1': 'sum',
-    '목표2': 'sum'
-}).reset_index()
+# 목표 데이터를 총판코드로 그룹화
+if '총판코드' in target_summary.columns:
+    # 총판코드 정규화
+    target_summary['총판코드_정규화'] = target_summary['총판코드'].apply(lambda x: 
+        str(int(x)) if isinstance(x, (int, float)) and not pd.isna(x) and float(x).is_integer() 
+        else str(x).strip() if pd.notna(x) else '')
+    
+    # 총판코드별 목표 집계 후 공식명 매핑
+    target_by_code = target_summary.groupby('총판코드_정규화').agg({
+        '전체목표': 'sum',
+        '목표1': 'sum',
+        '목표2': 'sum'
+    }).reset_index()
+    
+    # 총판명(공식) 매핑
+    target_by_code['총판명(공식)'] = target_by_code['총판코드_정규화'].map(dist_code_map)
+    target_map = target_by_code[target_by_code['총판명(공식)'].notna()][[
+        '총판명(공식)', '전체목표', '목표1', '목표2'
+    ]].copy()
+else:
+    # Fallback: 총판명(공식)으로 그룹화
+    target_map = target_summary.groupby('총판명(공식)').agg({
+        '전체목표': 'sum',
+        '목표1': 'sum',
+        '목표2': 'sum'
+    }).reset_index()
+    st.sidebar.warning("⚠️ 목표 데이터에 총판코드가 없습니다!")
 
-# 안전한 실적 매핑: 목표 총판명(공식) 기준으로 필터된 주문(order_2026)에서 직접 실적 합계를 계산
-# 1) distributor_df가 있으면 공식명 매핑 테이블 생성
-# 2) order_2026에서 총판별 부수 합을 구해 공식명으로 매핑하여 실적 맵 생성
-dist_map = {}
-dist_code_map = {}
+# 🎯 총판코드만 사용한 매핑 (이름 기반 매핑 완전 제거)
+# 총판코드 → 총판명(공식) 매핑 테이블 생성
+dist_code_map = {}  # {총판코드: 총판명(공식)}
 
-def normalize_name(name):
-    """총판명 정규화: 공백/괄호 제거, 소문자 변환"""
-    if pd.isna(name):
-        return ''
-    s = str(name).strip()
-    # 괄호 내용 제거
-    import re
-    s = re.sub(r'\([^)]*\)', '', s)
-    # 공백 제거
-    s = s.replace(' ', '')
-    return s.lower()
-
-if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
+if not distributor_df.empty and '총판명(공식)' in distributor_df.columns and '총판코드' in distributor_df.columns:
     for _, r in distributor_df.iterrows():
         official = r.get('총판명(공식)')
-        if pd.isna(official):
+        code_val = r.get('총판코드')
+        
+        if pd.isna(official) or pd.isna(code_val):
             continue
+        
         official_str = str(official).strip()
-        official_normalized = normalize_name(official)
         
-        # map any known name variants to official
-        for col in ['총판명', '총판명1', '총판']:
-            if col in distributor_df.columns and pd.notna(r.get(col)):
-                raw_name = str(r.get(col)).strip()
-                # 1. 원본 그대로 매핑
-                dist_map[raw_name] = official_str
-                # 2. 정규화된 키로도 매핑
-                dist_map[normalize_name(raw_name)] = official_str
+        # 총판코드를 정규화 (123.0 → "123")
+        try:
+            if isinstance(code_val, (int, float)) and not pd.isna(code_val):
+                code_str = str(int(code_val)) if float(code_val).is_integer() else str(code_val).strip()
+            else:
+                code_str = str(code_val).strip()
+        except Exception:
+            code_str = str(code_val).strip()
         
-        # also map by numeric/code columns if present (숫자코드 or 총판코드)
-        for code_col in ['숫자코드', '총판코드']:
-            if code_col in distributor_df.columns and pd.notna(r.get(code_col)):
-                code_val = r.get(code_col)
-                try:
-                    # normalize numeric codes like 123.0 -> "123"
-                    if isinstance(code_val, (int, float)) and not pd.isna(code_val):
-                        code_str = str(int(code_val)) if float(code_val).is_integer() else str(code_val).strip()
-                    else:
-                        code_str = str(code_val).strip()
-                except Exception:
-                    code_str = str(code_val).strip()
-                dist_code_map[code_str] = official_str
+        dist_code_map[code_str] = official_str
 
-# Allow user-applied custom mappings stored in session to override dist_map
-custom_map = st.session_state.get('dist_map_custom', {}) if isinstance(st.session_state.get('dist_map_custom', {}), dict) else {}
-if custom_map:
-    dist_map.update(custom_map)
+st.sidebar.info(f"✅ 총판코드 매핑: {len(dist_code_map)}개 총판")
 
-# --- 미매핑 총판 보고 (디버그 및 매핑 보강용)
-mapped_keys = set(dist_map.keys())
-order_totals = order_2026.groupby('총판')['부수'].sum().reset_index()
-order_totals['총판_clean'] = order_totals['총판'].astype(str).str.strip()
-unmapped = order_totals[~order_totals['총판_clean'].isin(mapped_keys)]
-if not unmapped.empty:
-    unmapped = unmapped.sort_values('부수', ascending=False)
-    st.sidebar.warning(f"⚠️ 매핑되지 않은 총판 발견: {len(unmapped)}개")
-    st.sidebar.dataframe(unmapped[['총판','부수']].rename(columns={'부수':'필터된 부수'}), use_container_width=True)
-    try:
-        csv_unmapped = unmapped[['총판','부수']].to_csv(index=False, encoding='utf-8-sig')
-        st.sidebar.download_button("📥 미매핑 총판 CSV 다운로드", data=csv_unmapped, file_name='unmapped_distributors.csv', mime='text/csv')
-    except Exception:
-        pass
+# --- 미매핑 총판 보고 (총판코드 기준)
+if '총판코드' in order_2026.columns:
+    # 총판코드 정규화
+    order_2026['총판코드_정규화'] = order_2026['총판코드'].apply(lambda x: 
+        str(int(x)) if isinstance(x, (int, float)) and not pd.isna(x) and float(x).is_integer() 
+        else str(x).strip() if pd.notna(x) else '')
+    
+    mapped_codes = set(dist_code_map.keys())
+    order_totals = order_2026.groupby(['총판', '총판코드_정규화'])['부수'].sum().reset_index()
+    unmapped = order_totals[~order_totals['총판코드_정규화'].isin(mapped_codes)]
+    unmapped = unmapped[unmapped['총판코드_정규화'] != '']  # 빈 코드 제외
+    
+    if not unmapped.empty:
+        unmapped = unmapped.sort_values('부수', ascending=False)
+        st.sidebar.warning(f"⚠️ 총판코드 미매핑: {len(unmapped)}개")
+        st.sidebar.dataframe(
+            unmapped[['총판', '총판코드_정규화', '부수']].rename(columns={'부수':'필터된 부수'}), 
+            use_container_width=True
+        )
+        try:
+            csv_unmapped = unmapped[['총판', '총판코드_정규화', '부수']].to_csv(index=False, encoding='utf-8-sig')
+            st.sidebar.download_button("📥 미매핑 총판 CSV 다운로드", data=csv_unmapped, file_name='unmapped_distributors.csv', mime='text/csv')
+        except Exception:
+            pass
+else:
+    st.sidebar.error("⚠️ 총판코드 컬럼이 없습니다!")
 
-    # 자동 매핑 제안 (difflib 기반 유사도)
-    try:
-        from difflib import SequenceMatcher
+# 🎯 총판코드 기반 매핑 완료
 
-        official_names = target_map['총판명(공식)'].astype(str).unique().tolist() if '총판명(공식)' in target_map.columns else []
-        suggestions = []
-        for raw in unmapped['총판_clean'].unique():
-            best = None
-            best_score = 0.0
-            for off in official_names:
-                score = SequenceMatcher(None, str(raw), str(off)).ratio()
-                if score > best_score:
-                    best_score = score
-                    best = off
-            suggestions.append({'원본': raw, '추천_공식명': best or '', '유사도(%)': int(best_score*100)})
-
-        sug_df = pd.DataFrame(suggestions).sort_values('유사도(%)', ascending=False)
-        st.sidebar.markdown("**자동 매핑 제안 (유사도 기준)**")
-        st.sidebar.dataframe(sug_df, use_container_width=True)
-
-        # 사용자 선택으로 적용
-        apply_opts = [f"{r['원본']} -> {r['추천_공식명']} ({r['유사도(%)']}%)" for _, r in sug_df.iterrows() if r['추천_공식명'] and r['유사도(%)'] >= 50]
-        if apply_opts:
-            selected = st.sidebar.multiselect('자동매핑 적용할 항목 선택 (유사도 ≥50%)', options=apply_opts)
-            if st.sidebar.button('✅ 선택 항목 매핑 적용') and selected:
-                # parse and save to session custom map
-                to_apply = {}
-                for s in selected:
-                    raw, rest = s.split(' -> ', 1)
-                    match = rest.rsplit(' (', 1)[0]
-                    to_apply[raw.strip()] = match.strip()
-                existing = st.session_state.get('dist_map_custom', {})
-                existing.update(to_apply)
-                st.session_state['dist_map_custom'] = existing
-                st.rerun()
-    except Exception:
-        pass
-
-# --- 이제 사용자 매핑이 적용된 dist_map 기준으로 실적 합계 계산
-# 집계 전: 주문 행 단위에서 먼저 '총판코드'로 매핑을 시도하고, 없으면 이름으로 매핑
+# --- 실적 집계: 총판코드로 매핑
 order_actual_df = order_2026.copy()
 
 def _map_row_to_official(row):
-    # try code-based mapping first
-    if '총판코드' in row.index and pd.notna(row.get('총판코드')) and dist_code_map:
+    """총판코드로만 매핑 (이름 기반 매핑 제거)"""
+    if '총판코드' in row.index and pd.notna(row.get('총판코드')):
         code_val = row.get('총판코드')
         try:
-            code_str = str(int(code_val)) if isinstance(code_val, (int, float)) and float(code_val).is_integer() else str(code_val).strip()
+            # 총판코드 정규화
+            if isinstance(code_val, (int, float)) and not pd.isna(code_val):
+                code_str = str(int(code_val)) if float(code_val).is_integer() else str(code_val).strip()
+            else:
+                code_str = str(code_val).strip()
         except Exception:
             code_str = str(code_val).strip()
+        
+        # 총판코드로 공식명 매핑
         if code_str in dist_code_map:
             return dist_code_map[code_str]
-    # fallback to name-based mapping
-    name = str(row.get('총판', '')).strip()
-    # 1. 원본 이름으로 시도
-    if name in dist_map:
-        return dist_map[name]
-    # 2. 정규화된 이름으로 시도
-    normalized = normalize_name(name)
-    if normalized in dist_map:
-        return dist_map[normalized]
-    # 3. 부분 문자열 매칭 시도 (유사도 높은 공식명 찾기)
-    from difflib import SequenceMatcher
-    best_match = None
-    best_score = 0.8  # 80% 이상만 허용
-    for official in set(dist_map.values()):
-        score = SequenceMatcher(None, normalized, normalize_name(official)).ratio()
-        if score > best_score:
-            best_score = score
-            best_match = official
-    if best_match:
-        return best_match
-    # 4. 매칭 실패시 원본 이름 반환
-    return name
+        else:
+            # 매핑 실패 - 총판코드 반환 (디버깅용)
+            return f"[미매핑:{code_str}]"
+    
+    # 총판코드가 없으면 총판명 반환 (경고)
+    return f"[코드없음:{row.get('총판', 'N/A')}]"
 
 # Aggregate by original identifiers then map to official names
 if '총판코드' in order_actual_df.columns:
@@ -281,11 +240,6 @@ if st.sidebar.button('🔁 세션 초기화 및 재실행'):
             del st.session_state[k]
     st.rerun()
 
-# --- 총판 매핑 상세 디버그: 어떤 원본 이름들이 특정 공식명으로 합쳐졌는지 확인
-reverse_map = {}
-for raw_name, official in dist_map.items():
-    reverse_map.setdefault(official, []).append(raw_name)
-
 # 실제 실적 상위 공식명 확인용 데이터프레임
 actual_official_df = pd.DataFrame([{'총판명(공식)': k, '실적부수': v} for k, v in actual_by_official.items()])
 
@@ -294,56 +248,48 @@ if not distributor_df.empty and '등급' in distributor_df.columns and '총판�
     grade_map = distributor_df.set_index('총판명(공식)')['등급'].to_dict()
     target_map['등급'] = target_map['총판명(공식)'].map(grade_map)
     actual_official_df['등급'] = actual_official_df['총판명(공식)'].map(grade_map)
-if not actual_official_df.empty:
+
+# --- 총판코드 기반 매핑 상세 디버그
+if not actual_official_df.empty and '총판코드' in order_2026.columns:
     actual_official_df = actual_official_df.sort_values('실적부수', ascending=False)
-    top_officials = actual_official_df.head(10)['총판명(공식)'].tolist()
+    
+    # [미매핑:xxx] 형식 제외한 정상 매핑만
+    valid_officials = actual_official_df[~actual_official_df['총판명(공식)'].astype(str).str.contains(r'\[미매핑:', na=False, regex=True)]
+    top_officials = valid_officials.head(10)['총판명(공식)'].tolist() if not valid_officials.empty else []
 
     # 기본 선택은 '통영)이문당'이 있으면 선택
-    default_select = '통영)이문당' if '통영)이문당' in actual_official_df['총판명(공식)'].values else (top_officials[0] if top_officials else None)
+    default_select = '통영)이문당' if '통영)이문당' in valid_officials['총판명(공식)'].values else (top_officials[0] if top_officials else None)
 
-    if default_select:
+    if default_select and top_officials:
         sel = st.sidebar.selectbox('🔎 실적 상위 공식명 선택(매핑 상세)', options=top_officials, index=top_officials.index(default_select) if default_select in top_officials else 0)
-    else:
-        sel = None
+        
+        # 해당 공식명에 매핑된 총판코드 찾기
+        reverse_code_map = {v: k for k, v in dist_code_map.items()}
+        sel_code = reverse_code_map.get(sel)
+        
+        if sel_code and '총판코드_정규화' in order_2026.columns:
+            contrib_rows = order_2026[order_2026['총판코드_정규화'] == sel_code].copy()
+            contrib_sum = int(contrib_rows['부수'].sum()) if not contrib_rows.empty else 0
 
-    if sel:
-        contributors = reverse_map.get(sel, [])
-        if not contributors:
-            # contributors가 없으면 sel 자체를 원본 이름으로 간주
-            contributors = [sel]
-
-        contrib_rows = order_2026[order_2026['총판'].astype(str).str.strip().isin(contributors)].copy()
-        contrib_sum = int(contrib_rows['부수'].sum()) if not contrib_rows.empty else 0
-
-        st.sidebar.markdown(f"**선택 공식명:** {sel} — 합계 실적: {contrib_sum:,}부")
-        if not contrib_rows.empty:
-            st.sidebar.dataframe(contrib_rows.groupby('총판')['부수'].sum().reset_index().rename(columns={'부수':'필터된 부수'}), use_container_width=True)
+            st.sidebar.markdown(f"**선택 공식명:** {sel}")
+            st.sidebar.markdown(f"**총판코드:** {sel_code}")
+            st.sidebar.markdown(f"**합계 실적:** {contrib_sum:,}부")
+            
+            if not contrib_rows.empty:
+                st.sidebar.dataframe(
+                    contrib_rows.groupby('총판')['부수'].sum().reset_index().rename(columns={'부수':'필터된 부수'}), 
+                    use_container_width=True
+                )
         else:
-            st.sidebar.info("해당 공식명에 매핑된 원본 총판이 없습니다.")
+            st.sidebar.info(f"{sel}에 매핑된 총판코드를 찾을 수 없습니다.")
 
-        # 통영)이문당 — 전체 2026(주관주문 포함) vs 필터(목표과목1/2) 비교
-        try:
-            if '학년도' in source_df.columns:
-                order_all_2026 = source_df[source_df['학년도'] == 2026].copy()
-            else:
-                order_all_2026 = source_df.copy()
 
-            # 원본 2026 전체에서 contributors가 차지하는 합
-            all_contrib_rows = order_all_2026[order_all_2026['총판'].astype(str).str.strip().isin(contributors)]
-            all_contrib_sum = int(all_contrib_rows['부수'].sum()) if not all_contrib_rows.empty else 0
-
-            st.sidebar.markdown(f"**비교(전체 2026 vs 목표과목 필터)**")
-            st.sidebar.write(f"- 필터(목표과목1/2) 합계: {contrib_sum:,}부")
-            st.sidebar.write(f"- 전체 2026 주문 합계: {all_contrib_sum:,}부")
-
-            if all_contrib_sum != contrib_sum:
-                st.sidebar.info("전체 2026 합계가 필터 합계와 다릅니다 — 목표과목 외 주문이 포함되어 있습니다.")
-        except Exception:
-            pass
-
-    # 상위 공식명 리스트(요약)도 노출
+# 상위 공식명 리스트(요약)도 노출
+if not actual_official_df.empty:
     st.sidebar.markdown("**실적 상위 공식명(요약)**")
-    st.sidebar.dataframe(actual_official_df.head(10).reset_index(drop=True), use_container_width=True)
+    # [미매핑:xxx] 형식 제외
+    display_df = actual_official_df[~actual_official_df['총판명(공식)'].astype(str).str.contains(r'\[미매핑:', na=False, regex=True)]
+    st.sidebar.dataframe(display_df.head(10).reset_index(drop=True), use_container_width=True)
 
 # Build achievement_df from target_map and map 실적부수 from actual_by_official
 achievement_df = target_map.copy()
@@ -362,16 +308,22 @@ achievement_df['총판'] = achievement_df['총판명(공식)']
 
 # --- 디버그: 통영)이문당 관련 매핑/실적 출처 확인
 debug_official = '통영)이문당'
-if debug_official in achievement_df['총판'].values:
+if debug_official in achievement_df['총판'].values and '총판코드_정규화' in order_2026.columns:
     official_row = achievement_df[achievement_df['총판'] == debug_official].iloc[0]
     sidebar_debug = []
     sidebar_debug.append({'항목':'achievement_df 실적부수', '값': int(official_row['실적부수'])})
     sidebar_debug.append({'항목':'achievement_df 전체목표', '값': int(official_row['전체목표'])})
-    # contributors from order_2026 grouped by raw 총판
-    contribs = order_2026[order_2026['총판'].astype(str).str.contains('이문당', na=False)].groupby('총판')['부수'].sum().reset_index()
-    if not contribs.empty:
-        for _, r in contribs.iterrows():
-            sidebar_debug.append({'항목':f"원본 총판: {r['총판']}", '값': int(r['부수'])})
+    
+    # 해당 공식명의 총판코드 찾기
+    reverse_code_map = {v: k for k, v in dist_code_map.items()}
+    debug_code = reverse_code_map.get(debug_official)
+    
+    if debug_code:
+        sidebar_debug.append({'항목':'총판코드', '값': debug_code})
+        contribs = order_2026[order_2026['총판코드_정규화'] == debug_code].groupby('총판')['부수'].sum().reset_index()
+        if not contribs.empty:
+            for _, r in contribs.iterrows():
+                sidebar_debug.append({'항목':f"원본 총판: {r['총판']}", '값': int(r['부수'])})
 
     # actual_by_official value
     sidebar_debug.append({'항목':'actual_by_official[통영)이문당]', '값': int(actual_by_official.get(debug_official, 0))})
