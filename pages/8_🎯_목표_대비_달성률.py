@@ -42,13 +42,58 @@ else:
     target_summary['목표1'] = target_summary['전체목표'] * 0.5
     target_summary['목표2'] = target_summary['전체목표'] * 0.5
 
-# 총판별 실적 집계 - 2026년도만
-st.info("💡 목표는 2026년도 기준이므로, 2026년도 주문만 집계하여 달성률을 계산합니다.")
+# 총판별 실적 집계 - 2026년도 목표과목1, 목표과목2만
+st.info("💡 목표는 2026년도 기준이므로, 2026년도 목표과목1·목표과목2 주문만 집계하여 달성률을 계산합니다.")
 
-school_code_col = '정보공시학교코드' if '정보공시학교코드' in order_df.columns else '학교코드'
+# 🚨 반드시 원본 주문 데이터에서 직접 필터링 (세션 order_df가 이미 필터됐을 수도 있으므로)
+if 'order_df_original' in st.session_state:
+    source_df = st.session_state['order_df_original'].copy()
+else:
+    # fallback: 현재 세션 order_df가 원본이라고 가정
+    source_df = order_df.copy()
 
-# 2026년도 주문만 필터링
-order_2026 = order_df[order_df['학년도'] == 2026] if '학년도' in order_df.columns else order_df
+st.sidebar.success(f"✅ 원본 데이터 사용: {len(source_df):,}건")
+
+school_code_col = '정보공시학교코드' if '정보공시학교코드' in source_df.columns else '학교코드'
+
+# 목표과목 컬럼 탐색
+target_col = None
+for col in source_df.columns:
+    if '목표과목' in str(col):
+        target_col = col
+        break
+
+if target_col is None:
+    st.error("❌ 목표과목 컬럼을 찾을 수 없습니다. CSV 파일에 '목표과목' 컬럼이 필요합니다.")
+    st.stop()
+
+# 2026년도 + 목표과목1/2 필터 적용
+if '학년도' in source_df.columns:
+    order_2026 = source_df[
+        (source_df['학년도'] == 2026) & 
+        (source_df[target_col].isin(['목표과목1', '목표과목2']))
+    ].copy()
+else:
+    order_2026 = source_df[source_df[target_col].isin(['목표과목1', '목표과목2'])].copy()
+
+# 디버깅: 필터링 결과 확인
+st.sidebar.write(f"📦 원본 데이터: {len(source_df):,}건 ({int(source_df['부수'].sum()):,}부)")
+st.sidebar.write(f"✅ 2026+목표과목1/2: {len(order_2026):,}건 ({int(order_2026['부수'].sum()):,}부)")
+test_imd = order_2026[order_2026['총판'].str.contains('이문당', na=False)]
+if len(test_imd) > 0:
+    imd_sum_filtered = int(test_imd['부수'].sum())
+    st.sidebar.write(f"🎯 통영)이문당(필터): {imd_sum_filtered:,}부")
+else:
+    imd_sum_filtered = 0
+
+# 명확한 시각적 확인을 위해 페이지 상단에 주요 KPI 노출
+col_a, col_b, col_c = st.columns([2, 2, 6])
+with col_a:
+    st.metric("필터 적용 건수", f"{len(order_2026):,}건")
+with col_b:
+    st.metric("필터 적용 부수", f"{int(order_2026['부수'].sum()):,}부")
+with col_c:
+    st.metric("통영)이문당(목표과목)", f"{imd_sum_filtered:,}부", help="2026년 목표과목1/2만 집계")
 
 actual_stats = order_2026.groupby('총판').agg({
     '부수': 'sum',
@@ -64,22 +109,204 @@ target_map = target_summary.groupby('총판명(공식)').agg({
     '목표2': 'sum'
 }).reset_index()
 
-achievement_df = pd.merge(
-    target_map,
-    actual_stats,
-    left_on='총판명(공식)',
-    right_on='총판',
-    how='outer'
-).fillna(0)
+# 안전한 실적 매핑: 목표 총판명(공식) 기준으로 필터된 주문(order_2026)에서 직접 실적 합계를 계산
+# 1) distributor_df가 있으면 공식명 매핑 테이블 생성
+# 2) order_2026에서 총판별 부수 합을 구해 공식명으로 매핑하여 실적 맵 생성
+dist_map = {}
+if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
+    for _, r in distributor_df.iterrows():
+        official = r.get('총판명(공식)')
+        if pd.isna(official):
+            continue
+        # map any known name variants to official
+        for col in ['총판명', '총판명1', '총판']:
+            if col in distributor_df.columns and pd.notna(r.get(col)):
+                dist_map[str(r.get(col)).strip()] = str(official).strip()
 
-# 총판명 통일
-achievement_df['총판'] = achievement_df['총판명(공식)'].fillna(achievement_df['총판'])
+# Allow user-applied custom mappings stored in session to override dist_map
+custom_map = st.session_state.get('dist_map_custom', {}) if isinstance(st.session_state.get('dist_map_custom', {}), dict) else {}
+if custom_map:
+    dist_map.update(custom_map)
+
+# --- 미매핑 총판 보고 (디버그 및 매핑 보강용)
+mapped_keys = set(dist_map.keys())
+order_totals = order_2026.groupby('총판')['부수'].sum().reset_index()
+order_totals['총판_clean'] = order_totals['총판'].astype(str).str.strip()
+unmapped = order_totals[~order_totals['총판_clean'].isin(mapped_keys)]
+if not unmapped.empty:
+    unmapped = unmapped.sort_values('부수', ascending=False)
+    st.sidebar.warning(f"⚠️ 매핑되지 않은 총판 발견: {len(unmapped)}개")
+    st.sidebar.dataframe(unmapped[['총판','부수']].rename(columns={'부수':'필터된 부수'}), use_container_width=True)
+    try:
+        csv_unmapped = unmapped[['총판','부수']].to_csv(index=False, encoding='utf-8-sig')
+        st.sidebar.download_button("📥 미매핑 총판 CSV 다운로드", data=csv_unmapped, file_name='unmapped_distributors.csv', mime='text/csv')
+    except Exception:
+        pass
+
+    # 자동 매핑 제안 (difflib 기반 유사도)
+    try:
+        from difflib import SequenceMatcher
+
+        official_names = target_map['총판명(공식)'].astype(str).unique().tolist() if '총판명(공식)' in target_map.columns else []
+        suggestions = []
+        for raw in unmapped['총판_clean'].unique():
+            best = None
+            best_score = 0.0
+            for off in official_names:
+                score = SequenceMatcher(None, str(raw), str(off)).ratio()
+                if score > best_score:
+                    best_score = score
+                    best = off
+            suggestions.append({'원본': raw, '추천_공식명': best or '', '유사도(%)': int(best_score*100)})
+
+        sug_df = pd.DataFrame(suggestions).sort_values('유사도(%)', ascending=False)
+        st.sidebar.markdown("**자동 매핑 제안 (유사도 기준)**")
+        st.sidebar.dataframe(sug_df, use_container_width=True)
+
+        # 사용자 선택으로 적용
+        apply_opts = [f"{r['원본']} -> {r['추천_공식명']} ({r['유사도(%)']}%)" for _, r in sug_df.iterrows() if r['추천_공식명'] and r['유사도(%)'] >= 50]
+        if apply_opts:
+            selected = st.sidebar.multiselect('자동매핑 적용할 항목 선택 (유사도 ≥50%)', options=apply_opts)
+            if st.sidebar.button('✅ 선택 항목 매핑 적용') and selected:
+                # parse and save to session custom map
+                to_apply = {}
+                for s in selected:
+                    raw, rest = s.split(' -> ', 1)
+                    match = rest.rsplit(' (', 1)[0]
+                    to_apply[raw.strip()] = match.strip()
+                existing = st.session_state.get('dist_map_custom', {})
+                existing.update(to_apply)
+                st.session_state['dist_map_custom'] = existing
+                st.experimental_rerun()
+    except Exception:
+        pass
+
+# --- 이제 사용자 매핑이 적용된 dist_map 기준으로 실적 합계 계산
+order_actual = order_2026.groupby('총판')['부수'].sum().reset_index()
+order_actual['총판_key'] = order_actual['총판'].map(lambda x: dist_map.get(str(x).strip(), str(x).strip()))
+actual_by_official = order_actual.groupby('총판_key')['부수'].sum().to_dict()
+
+# 디버그: 이문당 매핑 전/후 체크
+raw_imd_sum = order_actual[order_actual['총판'].astype(str).str.contains('이문당', na=False)]['부수'].sum()
+if raw_imd_sum > 0:
+    st.sidebar.info(f"🔍 '이문당' 원본 실적: {int(raw_imd_sum):,}부")
+
+if '통영)이문당' in actual_by_official:
+    st.sidebar.success(f"✅ '통영)이문당' 최종 실적: {int(actual_by_official['통영)이문당']):,}부")
+elif '이문당' in actual_by_official:
+    st.sidebar.warning(f"⚠️ '이문당'이 매핑되지 않음: {int(actual_by_official['이문당']):,}부")
+
+# 세션 초기화 버튼 (세션 캐시 문제로 인해 UI가 갱신되지 않을 때 사용)
+if st.sidebar.button('🔁 세션 초기화 및 재실행'):
+    keys_to_clear = ['order_df', 'order_df_original', 'target_df', 'distributor_df']
+    for k in keys_to_clear:
+        if k in st.session_state:
+            del st.session_state[k]
+    st.experimental_rerun()
+
+# --- 총판 매핑 상세 디버그: 어떤 원본 이름들이 특정 공식명으로 합쳐졌는지 확인
+reverse_map = {}
+for raw_name, official in dist_map.items():
+    reverse_map.setdefault(official, []).append(raw_name)
+
+# 실제 실적 상위 공식명 확인용 데이터프레임
+actual_official_df = pd.DataFrame([{'총판명(공식)': k, '실적부수': v} for k, v in actual_by_official.items()])
+if not actual_official_df.empty:
+    actual_official_df = actual_official_df.sort_values('실적부수', ascending=False)
+    top_officials = actual_official_df.head(10)['총판명(공식)'].tolist()
+
+    # 기본 선택은 '통영)이문당'이 있으면 선택
+    default_select = '통영)이문당' if '통영)이문당' in actual_official_df['총판명(공식)'].values else (top_officials[0] if top_officials else None)
+
+    if default_select:
+        sel = st.sidebar.selectbox('🔎 실적 상위 공식명 선택(매핑 상세)', options=top_officials, index=top_officials.index(default_select) if default_select in top_officials else 0)
+    else:
+        sel = None
+
+    if sel:
+        contributors = reverse_map.get(sel, [])
+        if not contributors:
+            # contributors가 없으면 sel 자체를 원본 이름으로 간주
+            contributors = [sel]
+
+        contrib_rows = order_2026[order_2026['총판'].astype(str).str.strip().isin(contributors)].copy()
+        contrib_sum = int(contrib_rows['부수'].sum()) if not contrib_rows.empty else 0
+
+        st.sidebar.markdown(f"**선택 공식명:** {sel} — 합계 실적: {contrib_sum:,}부")
+        if not contrib_rows.empty:
+            st.sidebar.dataframe(contrib_rows.groupby('총판')['부수'].sum().reset_index().rename(columns={'부수':'필터된 부수'}), use_container_width=True)
+        else:
+            st.sidebar.info("해당 공식명에 매핑된 원본 총판이 없습니다.")
+
+        # 통영)이문당 — 전체 2026(주관주문 포함) vs 필터(목표과목1/2) 비교
+        try:
+            if '학년도' in source_df.columns:
+                order_all_2026 = source_df[source_df['학년도'] == 2026].copy()
+            else:
+                order_all_2026 = source_df.copy()
+
+            # 원본 2026 전체에서 contributors가 차지하는 합
+            all_contrib_rows = order_all_2026[order_all_2026['총판'].astype(str).str.strip().isin(contributors)]
+            all_contrib_sum = int(all_contrib_rows['부수'].sum()) if not all_contrib_rows.empty else 0
+
+            st.sidebar.markdown(f"**비교(전체 2026 vs 목표과목 필터)**")
+            st.sidebar.write(f"- 필터(목표과목1/2) 합계: {contrib_sum:,}부")
+            st.sidebar.write(f"- 전체 2026 주문 합계: {all_contrib_sum:,}부")
+
+            if all_contrib_sum != contrib_sum:
+                st.sidebar.info("전체 2026 합계가 필터 합계와 다릅니다 — 목표과목 외 주문이 포함되어 있습니다.")
+        except Exception:
+            pass
+
+    # 상위 공식명 리스트(요약)도 노출
+    st.sidebar.markdown("**실적 상위 공식명(요약)**")
+    st.sidebar.dataframe(actual_official_df.head(10).reset_index(drop=True), use_container_width=True)
+
+# Build achievement_df from target_map and map 실적부수 from actual_by_official
+achievement_df = target_map.copy()
+achievement_df['실적부수'] = achievement_df['총판명(공식)'].map(lambda x: int(actual_by_official.get(str(x).strip(), 0)))
+
+# Fill numeric NaNs for 목표 컬럼
+for col in ['전체목표', '목표1', '목표2', '실적부수']:
+    if col in achievement_df.columns:
+        achievement_df[col] = achievement_df[col].fillna(0)
+
+# 총판 통일
+achievement_df['총판'] = achievement_df['총판명(공식)']
+
+# --- 디버그: 통영)이문당 관련 매핑/실적 출처 확인
+debug_official = '통영)이문당'
+if debug_official in achievement_df['총판'].values:
+    official_row = achievement_df[achievement_df['총판'] == debug_official].iloc[0]
+    sidebar_debug = []
+    sidebar_debug.append({'항목':'achievement_df 실적부수', '값': int(official_row['실적부수'])})
+    sidebar_debug.append({'항목':'achievement_df 전체목표', '값': int(official_row['전체목표'])})
+    # contributors from order_2026 grouped by raw 총판
+    contribs = order_2026[order_2026['총판'].astype(str).str.contains('이문당', na=False)].groupby('총판')['부수'].sum().reset_index()
+    if not contribs.empty:
+        for _, r in contribs.iterrows():
+            sidebar_debug.append({'항목':f"원본 총판: {r['총판']}", '값': int(r['부수'])})
+
+    # actual_by_official value
+    sidebar_debug.append({'항목':'actual_by_official[통영)이문당]', '값': int(actual_by_official.get(debug_official, 0))})
+    try:
+        st.sidebar.markdown('**[디버그] 통영)이문당 매핑/실적 출처**')
+        st.sidebar.dataframe(pd.DataFrame(sidebar_debug), use_container_width=True)
+    except Exception:
+        pass
 
 # 달성률 계산
 achievement_df['전체달성률(%)'] = (achievement_df['실적부수'] / achievement_df['전체목표'] * 100).replace([float('inf'), -float('inf')], 0).fillna(0)
 achievement_df['목표1달성률(%)'] = (achievement_df['실적부수'] / achievement_df['목표1'] * 100).replace([float('inf'), -float('inf')], 0).fillna(0)
 achievement_df['목표2달성률(%)'] = (achievement_df['실적부수'] / achievement_df['목표2'] * 100).replace([float('inf'), -float('inf')], 0).fillna(0)
 achievement_df['차이'] = achievement_df['실적부수'] - achievement_df['전체목표']
+
+# 데이터 정제: 숫자형 NaN 제거 및 총판명 결측치 처리
+num_cols = ['전체목표', '목표1', '목표2', '실적부수', '전체달성률(%)', '차이']
+for c in num_cols:
+    if c in achievement_df.columns:
+        achievement_df[c] = pd.to_numeric(achievement_df[c], errors='coerce').fillna(0)
+achievement_df['총판'] = achievement_df['총판'].fillna('')
 
 # 등급 정보 추가
 if not distributor_df.empty and '총판명(공식)' in distributor_df.columns and '등급' in distributor_df.columns:
@@ -161,7 +388,15 @@ with tab1:
         # 목표 vs 실적 비교 차트
         fig1 = go.Figure()
         
-        top_20 = achievement_df.head(20)
+        top_20 = achievement_df.head(20).copy()
+        # 안전성: 결측치 채우기
+        for col in ['총판', '전체목표', '실적부수']:
+            if col in top_20.columns:
+                top_20[col] = top_20[col].fillna('' if col == '총판' else 0)
+
+        if top_20.empty:
+            st.info('표시할 데이터가 없습니다.')
+        else:
         
         fig1.add_trace(go.Bar(
             name='목표',
@@ -189,23 +424,28 @@ with tab1:
             xaxis_tickangle=-45,
             height=500
         )
-        st.plotly_chart(fig1, use_container_width=True)
+            st.plotly_chart(fig1, use_container_width=True)
     
     with col2:
         # 달성률 차트
-        fig2 = px.bar(
-            achievement_df.head(20),
-            x='총판',
-            y='전체달성률(%)',
-            title="목표 달성률 TOP 20",
-            text='전체달성률(%)',
-            color='전체달성률(%)',
-            color_continuous_scale='RdYlGn'
-        )
-        fig2.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
-        fig2.update_layout(xaxis_tickangle=-45, height=500)
-        fig2.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="목표선")
-        st.plotly_chart(fig2, use_container_width=True)
+        df_top_rate = achievement_df.head(20).copy()
+        if df_top_rate.empty:
+            st.info('달성률 데이터가 없습니다.')
+        else:
+            df_top_rate['전체달성률(%)'] = df_top_rate['전체달성률(%)'].fillna(0)
+            fig2 = px.bar(
+                df_top_rate,
+                x='총판',
+                y='전체달성률(%)',
+                title="목표 달성률 TOP 20",
+                text='전체달성률(%)',
+                color='전체달성률(%)',
+                color_continuous_scale='RdYlGn'
+            )
+            fig2.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig2.update_layout(xaxis_tickangle=-45, height=500)
+            fig2.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="목표선")
+            st.plotly_chart(fig2, use_container_width=True)
     
     # 달성률 분포
     st.markdown("---")
@@ -355,7 +595,7 @@ with tab3:
 with tab4:
     st.subheader("📋 총판별 상세 달성률 데이터")
     
-    # 순위 추가
+    # 순위 추가 (이미 정렬되어 있음)
     achievement_df['순위'] = range(1, len(achievement_df) + 1)
     
     display_df = achievement_df[[
@@ -364,18 +604,24 @@ with tab4:
     ]].copy()
     
     st.dataframe(
-        display_df.style.format({
-            '전체목표': '{:,.0f}',
-            '실적부수': '{:,.0f}',
-            '전체달성률(%)': '{:.1f}',
-            '차이': '{:,.0f}',
-            '거래학교수': '{:,.0f}',
-            '주문금액': '{:,.0f}'
-        }).apply(
-            lambda x: ['color: green' if isinstance(v, (int, float)) and v >= 100 else ('color: red' if isinstance(v, (int, float)) and 0 <= v < 100 else '') for v in x],
-            subset=['전체달성률(%)'],
-            axis=0
-        ),
+        display_df,
+        column_config={
+            "순위": st.column_config.NumberColumn("순위", format="#%d"),
+            "총판": "총판명",
+            "등급": "등급",
+            "전체목표": st.column_config.NumberColumn("목표 부수", format="%d부"),
+            "실적부수": st.column_config.NumberColumn("실적 부수", format="%d부"),
+            "전체달성률(%)": st.column_config.ProgressColumn(
+                "달성률",
+                format="%.1f%%",
+                min_value=0,
+                max_value=100,
+            ),
+            "차이": st.column_config.NumberColumn("차이 (실적-목표)", format="%d부"),
+            "거래학교수": st.column_config.NumberColumn("거래 학교", format="%d개교"),
+            "주문금액": st.column_config.NumberColumn("주문 금액", format="₩%d"),
+        },
+        hide_index=True,
         use_container_width=True,
         height=600
     )
@@ -403,16 +649,19 @@ with tab5:
         over_achievement = gap_df[gap_df['차이'] > 0].sort_values('차이', ascending=False).head(10)
         
         if len(over_achievement) > 0:
+            # 안전한 텍스트 포맷: 값에 따라 + 기호를 붙인 문자열을 만들어 사용
+            over_achievement = over_achievement.copy()
+            over_achievement['text_label'] = over_achievement['차이'].apply(lambda v: f"+{int(v):,}" if v > 0 else f"{int(v):,}")
             fig = px.bar(
                 over_achievement,
                 x='총판',
                 y='차이',
                 title="목표 초과 달성 TOP 10",
-                text='차이',
+                text='text_label',
                 color='차이',
                 color_continuous_scale='Greens'
             )
-            fig.update_traces(texttemplate='%{text:+,.0f}', textposition='outside')
+            fig.update_traces(texttemplate='%{text}', textposition='outside')
             fig.update_layout(xaxis_tickangle=-45)
             st.plotly_chart(fig, use_container_width=True)
         else:
@@ -423,16 +672,18 @@ with tab5:
         under_achievement = gap_df[gap_df['차이'] < 0].sort_values('차이').head(10)
         
         if len(under_achievement) > 0:
+            under_achievement = under_achievement.copy()
+            under_achievement['text_label'] = under_achievement['차이'].apply(lambda v: f"{int(v):,}")
             fig = px.bar(
                 under_achievement,
                 x='총판',
                 y='차이',
                 title="목표 미달성 TOP 10",
-                text='차이',
+                text='text_label',
                 color='차이',
                 color_continuous_scale='Reds_r'
             )
-            fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+            fig.update_traces(texttemplate='%{text}', textposition='outside')
             fig.update_layout(xaxis_tickangle=-45)
             st.plotly_chart(fig, use_container_width=True)
         else:

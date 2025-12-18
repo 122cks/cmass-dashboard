@@ -340,8 +340,20 @@ with tab2:
             # 해당 등급의 총판 데이터
             grade_data = filtered_order[filtered_order['등급'] == grade]
             
-            # 2026년도 주문만 필터링 (목표 달성률 계산용)
-            grade_data_2026 = grade_data[grade_data['학년도'] == 2026] if '학년도' in grade_data.columns else grade_data
+            # 2026년도 목표과목1, 목표과목2만 필터링 (목표 달성률 계산용, 컬럼명 방어적 처리)
+            target_col = None
+            if '목표과목' in grade_data.columns:
+                target_col = '목표과목'
+            elif '2026 목표과목' in grade_data.columns:
+                target_col = '2026 목표과목'
+
+            if '학년도' in grade_data.columns and target_col is not None:
+                grade_data_2026 = grade_data[
+                    (grade_data['학년도'] == 2026) & 
+                    (grade_data[target_col].isin(['목표과목1', '목표과목2']))
+                ]
+            else:
+                grade_data_2026 = grade_data
             
             school_code_col = '정보공시학교코드' if '정보공시학교코드' in grade_data.columns else '학교코드'
             

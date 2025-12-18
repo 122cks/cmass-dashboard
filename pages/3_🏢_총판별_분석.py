@@ -177,10 +177,33 @@ if '총판' in filtered_order_df.columns:
     with tab1:
         st.subheader("총판별 판매 현황")
         
-        st.info("💡 **목표는 2026년도 기준**이므로, 2026년도 주문만 집계하여 달성률을 계산합니다.")
+        st.info("💡 **목표는 2026년도 기준**이므로, 2026년도 목표과목1·목표과목2 주문만 집계하여 달성률을 계산합니다.")
         
-        # 2026년도 주문만 필터링
-        filtered_order_2026 = filtered_order_df[filtered_order_df['학년도'] == 2026] if '학년도' in filtered_order_df.columns else filtered_order_df
+        # 🚨 원본 주문 데이터에서 직접 필터링 (세션 필터가 적용되지 않은 경우 대비)
+        if 'order_df_original' in st.session_state:
+            source_df = st.session_state['order_df_original'].copy()
+        else:
+            source_df = filtered_order_df.copy()
+        
+        # 목표과목 컬럼 탐색
+        target_col = None
+        for col in source_df.columns:
+            if '목표과목' in str(col):
+                target_col = col
+                break
+        
+        if target_col is None:
+            st.error("❌ 목표과목 컬럼을 찾을 수 없습니다. CSV 파일에 '목표과목' 컬럼이 필요합니다.")
+            st.stop()
+        
+        # 2026년도 + 목표과목1/2 필터 적용
+        if '학년도' in source_df.columns:
+            filtered_order_2026 = source_df[
+                (source_df['학년도'] == 2026) & 
+                (source_df[target_col].isin(['목표과목1', '목표과목2']))
+            ].copy()
+        else:
+            filtered_order_2026 = source_df[source_df[target_col].isin(['목표과목1', '목표과목2'])].copy()
         
         # Distributor statistics (전체 주문 데이터는 참고용)
         school_code_col = '정보공시학교코드' if '정보공시학교코드' in filtered_order_2026.columns else '학교코드'
@@ -258,7 +281,7 @@ if '총판' in filtered_order_df.columns:
         # 클릭 가능한 총판 테이블
         st.markdown("### 📋 총판별 상세 데이터 (클릭하여 상세보기)")
         
-        for idx, row in dist_stats.head(20).iterrows():
+        for rank, (idx, row) in enumerate(dist_stats.head(20).iterrows(), 1):
             col_btn, col_name, col_orders, col_schools, col_share = st.columns([1, 3, 2, 2, 2])
             
             with col_btn:
@@ -266,7 +289,7 @@ if '총판' in filtered_order_df.columns:
                     show_distributor_detail(row['총판'])
             
             with col_name:
-                st.write(f"**{row['총판']}**")
+                st.write(f"**#{rank} {row['총판']}**")
             with col_orders:
                 st.write(f"{row['주문부수']:,.0f}부")
             with col_schools:

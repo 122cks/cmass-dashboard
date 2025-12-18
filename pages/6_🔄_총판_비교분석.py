@@ -105,8 +105,20 @@ with tab1:
     # Calculate comprehensive statistics with market share
     comparison_stats = []
     
-    # 2026년도 주문만 필터링 (목표 달성률 계산용)
-    filtered_order_2026 = filtered_order[filtered_order['학년도'] == 2026] if '학년도' in filtered_order.columns else filtered_order
+    # 2026년도 목표과목1, 목표과목2만 필터링 (목표 달성률 계산용, 컬럼명 방어적 처리)
+    target_col = None
+    if '목표과목' in filtered_order.columns:
+        target_col = '목표과목'
+    elif '2026 목표과목' in filtered_order.columns:
+        target_col = '2026 목표과목'
+
+    if '학년도' in filtered_order.columns and target_col is not None:
+        filtered_order_2026 = filtered_order[
+            (filtered_order['학년도'] == 2026) & 
+            (filtered_order[target_col].isin(['목표과목1', '목표과목2']))
+        ]
+    else:
+        filtered_order_2026 = filtered_order
     
     for dist in selected_distributors:
         # 전체 데이터 (참고용)

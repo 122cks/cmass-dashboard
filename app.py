@@ -32,6 +32,21 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# --- 간단한 비밀번호 보호: 패스워드 2274 입력 시 접근 허용 ---
+if 'auth_ok' not in st.session_state:
+    st.session_state['auth_ok'] = False
+
+if not st.session_state['auth_ok']:
+    pwd = st.text_input("앱 비밀번호를 입력하세요:", type='password')
+    if pwd:
+        if pwd.strip() == '2274':
+            st.session_state['auth_ok'] = True
+            st.experimental_rerun()
+        else:
+            st.error("비밀번호가 올바르지 않습니다.")
+            st.stop()
+
+# ---------------------------------------------------------
 # File Paths
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TOTAL_FILE = os.path.join(BASE_DIR, "2025년도_학년별·학급별 학생수(초중고)_전체.csv")
@@ -156,7 +171,7 @@ def load_data():
         if '2026 목표과목' in product_df.columns:
             merge_cols.append('2026 목표과목')
 
-        product_merge = product_df[merge_cols].rename(columns={'교과군': '교과군_제품'})
+        product_merge = product_df[merge_cols].rename(columns={'교과군': '교과군_제품', '학교급': '제품_학교급'})
 
         order_df = pd.merge(
             order_df,
@@ -168,14 +183,32 @@ def load_data():
 
         # Add school level to subject name for clarity (중등 정보 vs 고등 정보)
         def add_school_level_to_subject(row):
-            if pd.notna(row.get('학교급')) and pd.notna(row.get('교과서명')):
-                school_level = str(row['학교급'])
-                subject = str(row['교과서명'])
-                # 학교급에서 중등/고등 추출
-                if '중학교' in school_level:
+            # Prefer 제품의 학교급 (제품_학교급) from merged product data; fall back to 주문의 학교급
+            prod_level = row.get('제품_학교급') if '제품_학교급' in row.index else None
+            order_level = row.get('학교급') if '학교급' in row.index else None
+            school_level_val = prod_level if pd.notna(prod_level) else order_level
+            if pd.notna(school_level_val) and pd.notna(row.get('교과서명')):
+                school_level = str(school_level_val).strip()
+                subject = str(row['교과서명']).strip()
+
+                # 숫자 코드로 표기된 경우 처리 (예: 3=중학교, 4=고등학교)
+                try:
+                    lvl_num = int(school_level)
+                except Exception:
+                    lvl_num = None
+
+                if lvl_num == 3:
                     return f'[중등] {subject}'
-                elif '고등학교' in school_level:
+                if lvl_num == 4:
                     return f'[고등] {subject}'
+
+                # 문자열 표기인 경우 더 넓게 탐지
+                low = school_level.lower()
+                if '중' in low and '고' not in low:
+                    return f'[중등] {subject}'
+                if '고' in low:
+                    return f'[고등] {subject}'
+
             return row.get('교과서명', '')
 
         order_df['교과서명_구분'] = order_df.apply(add_school_level_to_subject, axis=1)
@@ -230,9 +263,32 @@ def load_data():
 try:
     total_df, order_df, target_df, product_df, distributor_df, market_analysis, market_size_by_level, distributor_market, subject_market_by_dist = load_data()
     
+    # 🚨 중요: 실적 계산용 order_df는 2026년도 + 목표과목1/2만 사용
+    # 원본은 보관하고, 필터된 버전을 별도로 생성
+    order_df_original = order_df.copy()
+    
+    # 목표과목 컬럼 확인 (목표과목 또는 2026 목표과목)
+    target_col = None
+    if '목표과목' in order_df.columns:
+        target_col = '목표과목'
+    elif '2026 목표과목' in order_df.columns:
+        target_col = '2026 목표과목'
+    
+    # 2026년도 + 목표과목1/2 필터 적용
+    if '학년도' in order_df.columns and target_col is not None:
+        order_df_filtered = order_df[
+            (order_df['학년도'] == 2026) & 
+            (order_df[target_col].isin(['목표과목1', '목표과목2']))
+        ].copy()
+        st.sidebar.success(f"✅ 실적 필터 적용: 전체 {len(order_df):,}건 → 2026년도 목표과목1/2: {len(order_df_filtered):,}건 ({int(order_df_filtered['부수'].sum()):,}부)")
+    else:
+        order_df_filtered = order_df[order_df['학년도'] == 2026].copy() if '학년도' in order_df.columns else order_df.copy()
+        st.sidebar.warning(f"⚠️ 목표과목 컬럼 없음 - 2026년도 전체 사용: {len(order_df_filtered):,}건")
+    
     # Store in session state for access across pages
     st.session_state['total_df'] = total_df
-    st.session_state['order_df'] = order_df
+    st.session_state['order_df'] = order_df_filtered  # 🚨 필터된 데이터를 세션에 저장!
+    st.session_state['order_df_original'] = order_df_original  # 원본은 별도 보관
     st.session_state['target_df'] = target_df
     st.session_state['product_df'] = product_df
     st.session_state['distributor_df'] = distributor_df
@@ -723,29 +779,31 @@ st.markdown("---")
 st.header("🧭 페이지 안내")
 st.markdown("""
 <div style='background: linear-gradient(to right, #f8f9fa 0%, #e9ecef 100%); 
-            padding: 20px; border-radius: 10px; border-left: 5px solid #667eea;'>
-<p style='font-size: 1.1em; margin-bottom: 15px;'><b>왼쪽 사이드바에서 원하는 분석 페이지를 선택하세요:</b></p>
+            padding: 20px; border-radius: 10px; border-left: 5px solid #667eea; color: #111;'>
+<p style='font-size: 1.1em; margin-bottom: 15px; color: #111;'><b>왼쪽 사이드바에서 원하는 분석 페이지를 선택하세요:</b></p>
 
+<div style='color: #111; font-size: 0.98em; line-height:1.6;'>
 📚 <b>교과/과목별 분석</b><br>
 &nbsp;&nbsp;&nbsp;&nbsp;→ 과목별 점유율 및 학교급별 상세 분석, 히트맵 시각화
-
+<br><br>
 🗺️ <b>지역별 분석</b><br>
 &nbsp;&nbsp;&nbsp;&nbsp;→ 시도/교육청/시군구별 상세 분석, 지역 트렌드
-
+<br><br>
 🏢 <b>총판별 분석</b><br>
 &nbsp;&nbsp;&nbsp;&nbsp;→ 총판별 판매 현황 및 성과 비교, 효율성 분석
-
+<br><br>
 📖 <b>교과서별 분석</b><br>
 &nbsp;&nbsp;&nbsp;&nbsp;→ 개별 교과서 상세 분석 및 도서코드별 추적
-
+<br><br>
 🔍 <b>비교 분석</b><br>
 &nbsp;&nbsp;&nbsp;&nbsp;→ A/B 비교 및 크로스 분석 (지역, 총판, 과목)
-
+<br><br>
 🔄 <b>총판 비교분석</b><br>
 &nbsp;&nbsp;&nbsp;&nbsp;→ 2~6개 총판 동시 비교, 목표달성률, 시장 점유율
-
+<br><br>
 🏅 <b>등급별 분석</b><br>
 &nbsp;&nbsp;&nbsp;&nbsp;→ S/A/B/C/D/E/G 등급별 총판 성과 분석
+</div>
 </div>
 """, unsafe_allow_html=True)
 

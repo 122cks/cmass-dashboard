@@ -44,6 +44,12 @@ except FileNotFoundError as e:
 
 st.title("📊 22개정 자사 실적표 조회화면")
 
+# --- 주문 데이터 필터 (2026년도, 목표과목1/2만 사용) ---
+if '학년도' in order_df.columns and '목표과목' in order_df.columns:
+    order_filtered = order_df[(order_df['학년도'] == 2026) & (order_df['목표과목'].isin(['목표과목1', '목표과목2']))].copy()
+else:
+    order_filtered = order_df
+
 # Sidebar Filters
 st.sidebar.header("필터")
 # Filter by School Level from Total Data if available
@@ -68,8 +74,8 @@ tab1, tab2, tab3 = st.tabs(["📚 교과/과목별 점유율", "🗺️ 지역�
 with tab1:
     st.header("교과/과목별 점유율")
     
-    # Group orders by Subject
-    subject_group = order_df.groupby('과목명')['부수'].sum().reset_index()
+    # Group orders by Subject (2026년도 + 목표과목1/2 필터 적용)
+    subject_group = order_filtered.groupby('과목명')['부수'].sum().reset_index()
     subject_group = subject_group.sort_values(by='부수', ascending=False)
     
     # Calculate Share (Orders / Total Students in filtered market)
@@ -99,7 +105,7 @@ with tab2:
     market_by_region = filtered_total_df.groupby(region_col)['학생수(계)'].sum().reset_index()
     market_by_region.columns = [region_col, '전체학생수']
     
-    orders_by_region = order_df.groupby(region_col)['부수'].sum().reset_index()
+    orders_by_region = order_filtered.groupby(region_col)['부수'].sum().reset_index()
     orders_by_region.columns = [region_col, '주문부수']
     
     # Merge
@@ -123,8 +129,8 @@ with tab2:
 with tab3:
     st.header("총판 점유율")
     
-    # Group by Distributor
-    dist_group = order_df.groupby('총판')['부수'].sum().reset_index()
+    # Group by Distributor (2026년도 + 목표과목1/2 필터 적용)
+    dist_group = order_filtered.groupby('총판')['부수'].sum().reset_index()
     dist_group = dist_group.sort_values(by='부수', ascending=False)
     
     # Calculate Share of CMASS Sales
