@@ -31,7 +31,7 @@ else:
     print('⚠️ 목표과목 컬럼 없음')
 
 # 통영)이문당 관련 원본 총판명 찾기
-imd_all = ord2026[ord2026['총판'].str.contains('이문당', na=False)]
+    imd_all = ord2026[ord2026['총판'].str.contains('이문당', na=False, regex=False)]
 print(f'\n통영)이문당 관련 원본 총판명들:')
 for name in imd_all['총판'].unique():
     cnt = len(imd_all[imd_all['총판'] == name])
@@ -40,7 +40,7 @@ for name in imd_all['총판'].unique():
 
 print(f'\n통영)이문당 2026 전체 합계: {int(imd_all["부수"].sum()):,}부')
 
-imd_filtered = ord_filtered[ord_filtered['총판'].str.contains('이문당', na=False)]
+    imd_filtered = ord_filtered[ord_filtered['총판'].str.contains('이문당', na=False, regex=False)]
 print(f'통영)이문당 2026 목표과목1/2 합계: {int(imd_filtered["부수"].sum()):,}부')
 
 # 총판정보에서 공식명 확인
@@ -50,7 +50,7 @@ if os.path.exists(DIST):
     print(f'\n총판정보 파일 로드 완료 ({len(dist_df)}행)')
     
     if '총판명(공식)' in dist_df.columns:
-        imd_official = dist_df[dist_df['총판명(공식)'].str.contains('이문당', na=False)]
+        imd_official = dist_df[dist_df['총판명(공식)'].str.contains('이문당', na=False, regex=False)]
         print(f'총판명(공식)에 이문당 포함된 행: {len(imd_official)}')
         for _, row in imd_official.iterrows():
             print(f'  공식명: {row.get("총판명(공식)")}')
@@ -77,7 +77,7 @@ if os.path.exists(DIST):
 if os.path.exists(TARGET):
     tgt = pd.read_csv(TARGET, encoding='utf-8-sig')
     tgt.columns = tgt.columns.str.strip()
-    imd_target = tgt[tgt['총판명(공식)'].str.contains('이문당', na=False)]
+    imd_target = tgt[tgt['총판명(공식)'].str.contains('이문당', na=False, regex=False)]
     if len(imd_target) > 0:
         print(f'\n목표 데이터에서 통영)이문당:')
         for _, row in imd_target.iterrows():

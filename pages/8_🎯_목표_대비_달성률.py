@@ -53,7 +53,7 @@ school_code_col = '정보공시학교코드' if '정보공시학교코드' in or
 
 # 디버깅: 필터링 결과 확인
 st.sidebar.write(f"✅ 2026+목표과목1/2: {len(order_2026):,}건 ({int(order_2026['부수'].sum()):,}부)")
-test_imd = order_2026[order_2026['총판'].str.contains('이문당', na=False)]
+    test_imd = order_2026[order_2026['총판'].str.contains('이문당', na=False, regex=False)]
 if len(test_imd) > 0:
     imd_sum_filtered = int(test_imd['부수'].sum())
     st.sidebar.write(f"🎯 통영)이문당(필터): {imd_sum_filtered:,}부")
@@ -222,7 +222,7 @@ trade_school_map = metrics_by_official.set_index('총판명(공식)')['거래학
 order_amount_map = metrics_by_official.set_index('총판명(공식)')['주문금액'].to_dict()
 
 # 디버그: 이문당 매핑 전/후 체크
-raw_imd_sum = order_actual[order_actual['총판'].astype(str).str.contains('이문당', na=False)]['부수'].sum()
+    raw_imd_sum = order_actual[order_actual['총판'].astype(str).str.contains('이문당', na=False, regex=False)]['부수'].sum()
 if raw_imd_sum > 0:
     st.sidebar.info(f"🔍 '이문당' 원본 실적: {int(raw_imd_sum):,}부")
 

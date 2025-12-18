@@ -550,7 +550,7 @@ with tab3:
             
             with col1:
                 # Middle school subjects
-                middle_subjects = subject_by_level[subject_by_level['학교급명'].str.contains('중학교', na=False)].sort_values('부수', ascending=False).head(10)
+                middle_subjects = subject_by_level[subject_by_level['학교급명'].str.contains('중학교', na=False, regex=False)].sort_values('부수', ascending=False).head(10)
                 
                 if not middle_subjects.empty:
                     fig_middle = px.bar(
@@ -570,7 +570,7 @@ with tab3:
             
             with col2:
                 # High school subjects
-                high_subjects = subject_by_level[subject_by_level['학교급명'].str.contains('고등학교', na=False)].sort_values('부수', ascending=False).head(10)
+                high_subjects = subject_by_level[subject_by_level['학교급명'].str.contains('고등학교', na=False, regex=False)].sort_values('부수', ascending=False).head(10)
                 
                 if not high_subjects.empty:
                     fig_high = px.bar(
@@ -806,7 +806,7 @@ with tab6:
     search_term = st.text_input("🔍 과목명 검색", "")
     
     if search_term:
-        display_stats = subject_stats[subject_stats['과목명'].str.contains(search_term, case=False, na=False)]
+        display_stats = subject_stats[subject_stats['과목명'].str.contains(search_term, case=False, na=False, regex=False)]
     else:
         display_stats = subject_stats
     

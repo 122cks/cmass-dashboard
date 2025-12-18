@@ -1142,7 +1142,7 @@ if '총판' in filtered_order_df.columns:
         search_term = st.text_input("🔍 총판명 검색", "")
         
         if search_term:
-            display_stats = dist_stats[dist_stats['총판'].str.contains(search_term, case=False, na=False)]
+            display_stats = dist_stats[dist_stats['총판'].str.contains(search_term, case=False, na=False, regex=False)]
         else:
             display_stats = dist_stats
         

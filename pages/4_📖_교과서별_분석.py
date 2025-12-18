@@ -266,7 +266,7 @@ with tab3:
         search_code = st.text_input("🔍 도서코드 검색", "")
         
         if search_code:
-            code_data = filtered_df[filtered_df['도서코드'].str.contains(search_code, case=False, na=False)]
+            code_data = filtered_df[filtered_df['도서코드'].str.contains(search_code, case=False, na=False, regex=False)]
             
             if len(code_data) > 0:
                 st.success(f"검색 결과: {len(code_data)}건")
@@ -358,8 +358,8 @@ with tab4:
         
         if search_term:
             display_data = display_data[
-                display_data['과목명'].str.contains(search_term, case=False, na=False) |
-                display_data['도서코드'].astype(str).str.contains(search_term, case=False, na=False)
+                display_data['과목명'].str.contains(search_term, case=False, na=False, regex=False) |
+                display_data['도서코드'].astype(str).str.contains(search_term, case=False, na=False, regex=False)
             ]
         
         display_data = display_data.sort_values(sort_by, ascending=False)

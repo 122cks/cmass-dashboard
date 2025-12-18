@@ -170,7 +170,7 @@ with tab1:
             if dist_info.empty:
                 # Try partial match
                 pattern = dist.split(')')[-1] if ')' in dist else dist
-                dist_info = distributor_df[distributor_df['총판명(공식)'].str.contains(pattern, na=False)]
+                dist_info = distributor_df[distributor_df['총판명(공식)'].str.contains(pattern, na=False, regex=False)]
             if not dist_info.empty:
                 stats['등급'] = dist_info.iloc[0].get('등급', '-')
             else:
@@ -185,7 +185,7 @@ with tab1:
             if target_info.empty:
                 # Try partial match
                 dist_name = dist.split(')')[-1] if ')' in dist else dist
-                target_info = target_df[target_df['총판명(공식)'].str.contains(dist_name, na=False)]
+                target_info = target_df[target_df['총판명(공식)'].str.contains(dist_name, na=False, regex=False)]
             
             if not target_info.empty:
                 target_row = target_info.iloc[0]
@@ -690,7 +690,7 @@ with tab5:
                 
                 # Get market size from distributor_market
                 pattern = dist.split(')')[-1] if ')' in dist else dist
-                dist_market_row = distributor_market[distributor_market['총판명(공식)'].str.contains(pattern, na=False)]
+                dist_market_row = distributor_market[distributor_market['총판명(공식)'].str.contains(pattern, na=False, regex=False)]
                 if not dist_market_row.empty:
                     market_size = dist_market_row.iloc[0]['시장규모']
                 else:
@@ -806,7 +806,7 @@ with tab6:
                 
                 # Get market size
                 pattern = dist.split(')')[-1] if ')' in dist else dist
-                dist_market_row = distributor_market[distributor_market['총판명(공식)'].str.contains(pattern, na=False)]
+                dist_market_row = distributor_market[distributor_market['총판명(공식)'].str.contains(pattern, na=False, regex=False)]
                 if not dist_market_row.empty:
                     market_size = dist_market_row.iloc[0]['시장규모']
                 else:

@@ -37,7 +37,7 @@ if os.path.exists(TARGET):
     print('\nTop 10 by 달성률 (merged):')
     print(merged_sorted.head(10).to_string(index=False))
     # 통영)이문당 직접 확인
-    imd = order[(order['총판'].str.contains('이문당', na=False)) & (order['학년도']==2026)]
+    imd = order[(order['총판'].str.contains('이문당', na=False, regex=False)) & (order['학년도']==2026)]
     print('\n통영)이문당 - 2026 전체 sum 부수:', int(imd['부수'].sum()))
     imd_filtered = imd[imd['목표과목'].isin(['목표과목1','목표과목2'])]
     print('통영)이문당 - 2026 목표과목1+2 sum 부수:', int(imd_filtered['부수'].sum()))
