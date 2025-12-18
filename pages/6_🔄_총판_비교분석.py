@@ -521,7 +521,8 @@ with tab2:
             # Format using compatible method
             formatted_df = goal_data[detail_cols].copy()
             st.dataframe(
-                formatted_df.style.format(cast(Mapping[str, Any], format_dict), na_rep='-').background_gradient(
+                formatted_df.style.format(cast(Mapping[str, Any], format_dict), na_rep='-')  # type: ignore[arg-type]
+                .background_gradient(
                     subset=['목표달성률'], cmap='RdYlGn', vmin=0, vmax=200
                 ),
                 use_container_width=True
