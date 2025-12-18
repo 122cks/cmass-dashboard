@@ -1,13 +1,11 @@
 import streamlit as st
 import pandas as pd
 import os
-import sys
 
-# Add utils directory to path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'utils'))
-from market_size import calculate_market_size_by_subject
-from market_size_v2 import calculate_market_size_by_subject_v2
-from market_size_distributor import calculate_distributor_market_size, calculate_subject_market_by_distributor
+# Import utility modules from `utils` package
+from utils.market_size import calculate_market_size_by_subject
+from utils.market_size_v2 import calculate_market_size_by_subject_v2
+from utils.market_size_distributor import calculate_distributor_market_size, calculate_subject_market_by_distributor
 
 # Grade sorting function for distributors
 def get_grade_order(grade):

@@ -2,12 +2,10 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-import sys
 import os
 
-# Add utils to path
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(__file__)), 'utils'))
-from common_filters import apply_common_filters, show_filter_summary
+# Use utils package imports
+from utils.common_filters import apply_common_filters, show_filter_summary
 
 st.set_page_config(page_title="지역별 분석", page_icon="🗺️", layout="wide")
 
