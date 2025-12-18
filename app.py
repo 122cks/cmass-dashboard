@@ -70,7 +70,7 @@ def submit_pin():
         st.session_state['auth_ok'] = True
         st.session_state['auth_attempts'] = 0
         st.session_state['auth_lock_until'] = None
-        st.experimental_rerun()
+        st.rerun()
     else:
         st.session_state['auth_attempts'] += 1
         if st.session_state['auth_attempts'] >= MAX_ATTEMPTS:
