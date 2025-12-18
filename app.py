@@ -62,6 +62,9 @@ def backspace_pin():
 def append_digit(d):
     if len(st.session_state['pin_entry']) < 6:
         st.session_state['pin_entry'] += str(d)
+        # debug: record last pressed and increment click counter
+        st.session_state['last_pin_pressed'] = d
+        st.session_state['pin_clicks'] = st.session_state.get('pin_clicks', 0) + 1
         st.rerun()
 
 def submit_pin():
@@ -131,28 +134,28 @@ if not st.session_state['auth_ok']:
     for r in [(1,2,3), (4,5,6), (7,8,9)]:
         c1, c2, c3 = st.columns(3)
         with c1:
-            if st.button(str(r[0]), key=f"d{r[0]}"):
+            if st.button(str(r[0]), key=f"pin_d{r[0]}"):
                 append_digit(r[0])
         with c2:
-            if st.button(str(r[1]), key=f"d{r[1]}"):
+            if st.button(str(r[1]), key=f"pin_d{r[1]}"):
                 append_digit(r[1])
         with c3:
-            if st.button(str(r[2]), key=f"d{r[2]}"):
+            if st.button(str(r[2]), key=f"pin_d{r[2]}"):
                 append_digit(r[2])
 
     c1, c2, c3 = st.columns(3)
     with c1:
-        if st.button('⌫', key='backspace'):
+        if st.button('⌫', key='pin_backspace'):
             backspace_pin()
     with c2:
-        if st.button('0', key='d0'):
+        if st.button('0', key='pin_d0'):
             append_digit(0)
     with c3:
-        if st.button('지우기', key='clear_pin'):
+        if st.button('지우기', key='pin_clear'):
             clear_pin()
 
     # Submit button (full width)
-    if st.button('✓ 입력', key='submit_pin', use_container_width=True):
+    if st.button('✓ 입력', key='pin_submit', use_container_width=True):
         submit_pin()
 
     # Emergency manual input toggle (temporary helper when keypad fails)
@@ -161,12 +164,12 @@ if not st.session_state['auth_ok']:
 
     col_m1, col_m2 = st.columns([1,3])
     with col_m1:
-        if st.button('직접 입력(긴급)', key='manual_toggle'):
+        if st.button('직접 입력(긴급)', key='pin_manual_toggle'):
             st.session_state['manual_pin_visible'] = not st.session_state['manual_pin_visible']
     with col_m2:
         if st.session_state.get('manual_pin_visible'):
             manual_val = st.text_input('PIN 직접 입력 (긴급)', value='', type='password', key='manual_pin_input')
-            if st.button('직접 제출', key='manual_submit'):
+            if st.button('직접 제출', key='pin_manual_submit'):
                 st.session_state['pin_entry'] = manual_val
                 submit_pin()
 
@@ -174,6 +177,8 @@ if not st.session_state['auth_ok']:
     with st.expander('디버그 상태 (임시)', expanded=False):
         st.write({
             'pin_entry': st.session_state.get('pin_entry'),
+            'last_pin_pressed': st.session_state.get('last_pin_pressed'),
+            'pin_clicks': st.session_state.get('pin_clicks', 0),
             'auth_attempts': st.session_state.get('auth_attempts'),
             'auth_lock_until': st.session_state.get('auth_lock_until'),
             'is_locked': is_locked(),
