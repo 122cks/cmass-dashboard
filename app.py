@@ -32,19 +32,129 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# --- 간단한 비밀번호 보호: 패스워드 2274 입력 시 접근 허용 ---
+# --- 관리자 PIN 기반 접근 제어 (업그레이드된 입력 모달) ---
+# 동작 요약:
+# - 환경변수 ADMIN_PIN으로 PIN 설정 가능(기본값 '2274')
+# - 4자리 PIN 입력 지원(숫자 패드 UI + 직접 입력)
+# - 실패 시 시도 횟수 누적, 3회 실패하면 5분 잠금
+
+ADMIN_PIN = os.environ.get('ADMIN_PIN', '2274')
+LOCKOUT_SECONDS = int(os.environ.get('PIN_LOCKOUT_SECONDS', 300))  # 실패 시 잠금 시간 (초)
+MAX_ATTEMPTS = int(os.environ.get('PIN_MAX_ATTEMPTS', 3))
+
 if 'auth_ok' not in st.session_state:
     st.session_state['auth_ok'] = False
+if 'auth_attempts' not in st.session_state:
+    st.session_state['auth_attempts'] = 0
+if 'auth_lock_until' not in st.session_state:
+    st.session_state['auth_lock_until'] = None
+if 'pin_entry' not in st.session_state:
+    st.session_state['pin_entry'] = ''
+
+import time
+
+def clear_pin():
+    st.session_state['pin_entry'] = ''
+
+def backspace_pin():
+    st.session_state['pin_entry'] = st.session_state['pin_entry'][:-1]
+
+def append_digit(d):
+    if len(st.session_state['pin_entry']) < 6:
+        st.session_state['pin_entry'] += str(d)
+
+def submit_pin():
+    entered = st.session_state.get('pin_entry', '').strip()
+    # Accept also if user typed full PIN into manual input fallback
+    if entered == ADMIN_PIN:
+        st.session_state['auth_ok'] = True
+        st.session_state['auth_attempts'] = 0
+        st.session_state['auth_lock_until'] = None
+        st.experimental_rerun()
+    else:
+        st.session_state['auth_attempts'] += 1
+        if st.session_state['auth_attempts'] >= MAX_ATTEMPTS:
+            st.session_state['auth_lock_until'] = time.time() + LOCKOUT_SECONDS
+        st.error("PIN이 올바르지 않습니다. 남은 시도: {}".format(max(0, MAX_ATTEMPTS - st.session_state['auth_attempts'])))
+        st.session_state['pin_entry'] = ''
+
+def is_locked():
+    lock_until = st.session_state.get('auth_lock_until')
+    if lock_until and time.time() < lock_until:
+        return True
+    return False
 
 if not st.session_state['auth_ok']:
-    pwd = st.text_input("앱 비밀번호를 입력하세요:", type='password')
-    if pwd:
-        if pwd.strip() == '2274':
-            st.session_state['auth_ok'] = True
-            st.rerun()
-        else:
-            st.error("비밀번호가 올바르지 않습니다.")
-            st.stop()
+    # 락아웃 적용
+    if is_locked():
+        remaining = int(st.session_state['auth_lock_until'] - time.time())
+        mins = remaining // 60
+        secs = remaining % 60
+        st.error(f"비밀번호 시도 횟수 초과: 잠금 상태입니다. 남은 시간 {mins}분 {secs}초")
+        st.stop()
+
+    # Modal-like centered box using container and CSS
+    st.markdown(
+        """
+        <style>
+        .pin-modal {position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:#0b2b3a;color:#fff;padding:24px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.5);z-index:9999;width:420px}
+        .pin-display{background:#fff;color:#000;padding:12px;border-radius:8px;text-align:center;font-size:22px;margin-bottom:12px}
+        .pin-btn{background:#2b7be9;color:#fff;padding:10px 12px;margin:4px;border-radius:6px;border:none;font-size:18px}
+        .pin-btn-secondary{background:#6c757d}
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    with st.container():
+        st.markdown('<div class="pin-modal">', unsafe_allow_html=True)
+        st.markdown('<h3 style="margin:0 0 8px 0; text-align:center;">관리자 PIN 입력</h3>', unsafe_allow_html=True)
+
+        # PIN masked display
+        masked = '•' * len(st.session_state['pin_entry'])
+        st.markdown(f'<div class="pin-display">{masked or "••••"}</div>', unsafe_allow_html=True)
+
+        # Numeric keypad layout
+        cols = st.columns([1,1,1])
+        for r in [(1,2,3), (4,5,6), (7,8,9)]:
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                if st.button(str(r[0]), key=f"d{r[0]}"):
+                    append_digit(r[0])
+            with c2:
+                if st.button(str(r[1]), key=f"d{r[1]}"):
+                    append_digit(r[1])
+            with c3:
+                if st.button(str(r[2]), key=f"d{r[2]}"):
+                    append_digit(r[2])
+
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            if st.button('0', key='d0'):
+                append_digit(0)
+        with c2:
+            if st.button('입력', key='submit_pin'):
+                submit_pin()
+        with c3:
+            if st.button('지우기', key='clear_pin'):
+                clear_pin()
+
+        # Backspace and manual input fallback
+        back_col, manual_col = st.columns([1,3])
+        with back_col:
+            if st.button('⌫', key='backspace'):
+                backspace_pin()
+        with manual_col:
+            manual = st.text_input('직접 입력 (숫자 4자리)', value='', type='password', key='manual_pin')
+            if manual:
+                # 직접 입력 제출 시 pin_entry로 옮겨서 검증
+                st.session_state['pin_entry'] = manual
+                submit_pin()
+
+        st.markdown('</div>', unsafe_allow_html=True)
+
+    # Prevent further page rendering until auth_ok
+    st.stop()
 
 # ---------------------------------------------------------
 # File Paths
