@@ -169,7 +169,7 @@ with tab1:
             dist_info = distributor_df[distributor_df['총판명(공식)'] == dist]
             if dist_info.empty:
                 # Try partial match
-                pattern = dist.split(')')[-1] if ')' in dist else dist
+                pattern = (dist.split(')')[-1].strip() if ')' in dist else str(dist).strip())
                 dist_info = distributor_df[distributor_df['총판명(공식)'].str.contains(pattern, na=False, regex=False)]
             if not dist_info.empty:
                 stats['등급'] = dist_info.iloc[0].get('등급', '-')
@@ -689,7 +689,7 @@ with tab5:
                 school_code_col = '정보공시학교코드' if '정보공시학교코드' in dist_data.columns else '학교코드'
                 
                 # Get market size from distributor_market
-                pattern = dist.split(')')[-1] if ')' in dist else dist
+                pattern = (dist.split(')')[-1].strip() if ')' in dist else str(dist).strip())
                 dist_market_row = distributor_market[distributor_market['총판명(공식)'].str.contains(pattern, na=False, regex=False)]
                 if not dist_market_row.empty:
                     market_size = dist_market_row.iloc[0]['시장규모']
@@ -805,7 +805,7 @@ with tab6:
                 school_code_col = '정보공시학교코드' if '정보공시학교코드' in dist_data.columns else '학교코드'
                 
                 # Get market size
-                pattern = dist.split(')')[-1] if ')' in dist else dist
+                pattern = (dist.split(')')[-1].strip() if ')' in dist else str(dist).strip())
                 dist_market_row = distributor_market[distributor_market['총판명(공식)'].str.contains(pattern, na=False, regex=False)]
                 if not dist_market_row.empty:
                     market_size = dist_market_row.iloc[0]['시장규모']
