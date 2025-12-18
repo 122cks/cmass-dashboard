@@ -81,6 +81,9 @@ def submit_pin():
 
 def is_locked():
     lock_until = st.session_state.get('auth_lock_until')
+    # 잠금 비활성화 조건: 시도/시간 설정이 비정상(0 또는 음수)인 경우 잠금 해제
+    if MAX_ATTEMPTS <= 0 or LOCKOUT_SECONDS <= 0:
+        return False
     if lock_until and time.time() < lock_until:
         return True
     return False
@@ -92,6 +95,16 @@ if not st.session_state['auth_ok']:
         mins = remaining // 60
         secs = remaining % 60
         st.error(f"비밀번호 시도 횟수 초과: 잠금 상태입니다. 남은 시간 {mins}분 {secs}초")
+
+        col_a, col_b = st.columns([1,3])
+        with col_a:
+            if st.button('세션 초기화', help='현재 브라우저 세션의 잠금을 해제합니다.'):
+                st.session_state['auth_attempts'] = 0
+                st.session_state['auth_lock_until'] = None
+                st.session_state['pin_entry'] = ''
+                st.rerun()
+        with col_b:
+            st.caption('잠금이 계속되면 시크릿 창에서 접속하거나, 관리자 환경변수로 PIN 잠금을 끌 수 있습니다(PIN_MAX_ATTEMPTS<=0 또는 PIN_LOCKOUT_SECONDS<=0).')
         st.stop()
 
     # Modal-like centered box using container and CSS
