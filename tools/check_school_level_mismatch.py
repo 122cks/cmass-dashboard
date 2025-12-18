@@ -41,13 +41,13 @@ def add_school_level_to_subject(row):
 merged['교과서명_구분_calc'] = merged.apply(add_school_level_to_subject, axis=1)
 
 # Find rows where 교과서명_구분_calc indicates 중등 but 학교급 contains 고등
-mask = merged['교과서명_구분_calc'].str.contains('\[중등\]', na=False) & merged['학교급'].astype(str).str.contains('고', na=False)
+mask = merged['교과서명_구분_calc'].str.contains(r'\[중등\]', na=False) & merged['학교급'].astype(str).str.contains('고', na=False)
 mismatch1 = merged[mask]
 print('\nRows where calculated [중등] but 학교급 contains "고" (sample 10):')
 print(mismatch1[['도서코드(교지명구분)','학교급','교과서명','교과서명_구분_calc']].head(10).to_string(index=False))
 
 # And vice versa: computed [고등] but 학교급 contains '중'
-mask2 = merged['교과서명_구분_calc'].str.contains('\[고등\]', na=False) & merged['학교급'].astype(str).str.contains('중', na=False)
+mask2 = merged['교과서명_구분_calc'].str.contains(r'\[고등\]', na=False) & merged['학교급'].astype(str).str.contains('중', na=False)
 mismatch2 = merged[mask2]
 print('\nRows where calculated [고등] but 학교급 contains "중" (sample 10):')
 print(mismatch2[['도서코드(교지명구분)','학교급','교과서명','교과서명_구분_calc']].head(10).to_string(index=False))

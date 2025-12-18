@@ -141,16 +141,16 @@ if not st.session_state['auth_ok']:
                 if st.button(str(r[2]), key=f"d{r[2]}"):
                     append_digit(r[2])
 
-        c1, c2, c3 = st.columns(3)
-        with c1:
-            if st.button('⌫', key='backspace'):
-                backspace_pin()
-        with c2:
-            if st.button('0', key='d0'):
-                append_digit(0)
-        with c3:
-            if st.button('지우기', key='clear_pin'):
-                clear_pin()
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        if st.button('⌫', key='backspace'):
+            backspace_pin()
+    with c2:
+        if st.button('0', key='d0'):
+            append_digit(0)
+    with c3:
+        if st.button('지우기', key='clear_pin'):
+            clear_pin()
 
         # Submit button (full width)
         if st.button('✓ 입력', key='submit_pin', use_container_width=True):
