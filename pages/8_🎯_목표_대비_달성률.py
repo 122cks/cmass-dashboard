@@ -88,15 +88,36 @@ target_map = target_summary.groupby('총판명(공식)').agg({
 # 2) order_2026에서 총판별 부수 합을 구해 공식명으로 매핑하여 실적 맵 생성
 dist_map = {}
 dist_code_map = {}
+
+def normalize_name(name):
+    """총판명 정규화: 공백/괄호 제거, 소문자 변환"""
+    if pd.isna(name):
+        return ''
+    s = str(name).strip()
+    # 괄호 내용 제거
+    import re
+    s = re.sub(r'\([^)]*\)', '', s)
+    # 공백 제거
+    s = s.replace(' ', '')
+    return s.lower()
+
 if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
     for _, r in distributor_df.iterrows():
         official = r.get('총판명(공식)')
         if pd.isna(official):
             continue
+        official_str = str(official).strip()
+        official_normalized = normalize_name(official)
+        
         # map any known name variants to official
         for col in ['총판명', '총판명1', '총판']:
             if col in distributor_df.columns and pd.notna(r.get(col)):
-                dist_map[str(r.get(col)).strip()] = str(official).strip()
+                raw_name = str(r.get(col)).strip()
+                # 1. 원본 그대로 매핑
+                dist_map[raw_name] = official_str
+                # 2. 정규화된 키로도 매핑
+                dist_map[normalize_name(raw_name)] = official_str
+        
         # also map by numeric/code columns if present (숫자코드 or 총판코드)
         for code_col in ['숫자코드', '총판코드']:
             if code_col in distributor_df.columns and pd.notna(r.get(code_col)):
@@ -109,7 +130,7 @@ if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
                         code_str = str(code_val).strip()
                 except Exception:
                     code_str = str(code_val).strip()
-                dist_code_map[code_str] = str(official).strip()
+                dist_code_map[code_str] = official_str
 
 # Allow user-applied custom mappings stored in session to override dist_map
 custom_map = st.session_state.get('dist_map_custom', {}) if isinstance(st.session_state.get('dist_map_custom', {}), dict) else {}
@@ -185,7 +206,26 @@ def _map_row_to_official(row):
             return dist_code_map[code_str]
     # fallback to name-based mapping
     name = str(row.get('총판', '')).strip()
-    return dist_map.get(name, name)
+    # 1. 원본 이름으로 시도
+    if name in dist_map:
+        return dist_map[name]
+    # 2. 정규화된 이름으로 시도
+    normalized = normalize_name(name)
+    if normalized in dist_map:
+        return dist_map[normalized]
+    # 3. 부분 문자열 매칭 시도 (유사도 높은 공식명 찾기)
+    from difflib import SequenceMatcher
+    best_match = None
+    best_score = 0.8  # 80% 이상만 허용
+    for official in set(dist_map.values()):
+        score = SequenceMatcher(None, normalized, normalize_name(official)).ratio()
+        if score > best_score:
+            best_score = score
+            best_match = official
+    if best_match:
+        return best_match
+    # 4. 매칭 실패시 원본 이름 반환
+    return name
 
 # Aggregate by original identifiers then map to official names
 if '총판코드' in order_actual_df.columns:
@@ -248,6 +288,12 @@ for raw_name, official in dist_map.items():
 
 # 실제 실적 상위 공식명 확인용 데이터프레임
 actual_official_df = pd.DataFrame([{'총판명(공식)': k, '실적부수': v} for k, v in actual_by_official.items()])
+
+# 등급 정보 추가
+if not distributor_df.empty and '등급' in distributor_df.columns and '총판명(공식)' in distributor_df.columns:
+    grade_map = distributor_df.set_index('총판명(공식)')['등급'].to_dict()
+    target_map['등급'] = target_map['총판명(공식)'].map(grade_map)
+    actual_official_df['등급'] = actual_official_df['총판명(공식)'].map(grade_map)
 if not actual_official_df.empty:
     actual_official_df = actual_official_df.sort_values('실적부수', ascending=False)
     top_officials = actual_official_df.head(10)['총판명(공식)'].tolist()
@@ -588,19 +634,198 @@ with tab2:
 with tab3:
     st.subheader("📈 등급별 달성률 분석")
     
-    # 등급별 집계
-    grade_achievement = achievement_df.groupby('등급').agg({
-        '전체목표': 'sum',
-        '실적부수': 'sum',
-        '총판': 'count'
-    }).reset_index()
-    grade_achievement.columns = ['등급', '목표합계', '실적합계', '총판수']
-    grade_achievement['평균달성률(%)'] = (grade_achievement['실적합계'] / grade_achievement['목표합계'] * 100).fillna(0)
-    
-    # 등급 순서 정렬
-    grade_order = ['S', 'A', 'B', 'C', 'D', 'E', 'G', '미분류']
-    grade_achievement['등급_order'] = grade_achievement['등급'].apply(lambda x: grade_order.index(x) if x in grade_order else 99)
-    grade_achievement = grade_achievement.sort_values('등급_order')
+    if '등급' not in achievement_df.columns or achievement_df['등급'].isna().all():
+        st.warning("등급 정보가 없습니다. 총판정보.csv에 등급 컬럼이 있는지 확인해주세요.")
+    else:
+        # 등급별 집계
+        grade_achievement = achievement_df.groupby('등급').agg({
+            '전체목표': 'sum',
+            '실적부수': 'sum',
+            '시장규모': 'sum',
+            '거래학교수': 'sum',
+            '총판': 'count'
+        }).reset_index()
+        grade_achievement.columns = ['등급', '목표합계', '실적합계', '시장규모', '거래학교수', '총판수']
+        grade_achievement['평균달성률(%)'] = (grade_achievement['실적합계'] / grade_achievement['목표합계'] * 100).fillna(0)
+        grade_achievement['점유율(%)'] = (grade_achievement['실적합계'] / grade_achievement['시장규모'] * 100).fillna(0)
+        grade_achievement['총판당평균실적'] = (grade_achievement['실적합계'] / grade_achievement['총판수']).fillna(0)
+        
+        # 등급 순서 정렬
+        grade_order = ['S', 'A', 'B', 'C', 'D', 'E', 'G', '미분류']
+        grade_achievement['등급_order'] = grade_achievement['등급'].apply(lambda x: grade_order.index(x) if x in grade_order else 99)
+        grade_achievement = grade_achievement.sort_values('등급_order')
+        
+        # 주요 지표 표시
+        st.markdown("#### 📊 등급별 주요 지표")
+        col1, col2, col3, col4 = st.columns(4)
+        
+        with col1:
+            best_grade = grade_achievement.loc[grade_achievement['평균달성률(%)'].idxmax(), '등급'] if not grade_achievement.empty else 'N/A'
+            best_rate = grade_achievement['평균달성률(%)'].max() if not grade_achievement.empty else 0
+            st.metric("최고 달성률 등급", f"{best_grade}등급", f"{best_rate:.1f}%")
+        
+        with col2:
+            worst_grade = grade_achievement.loc[grade_achievement['평균달성률(%)'].idxmin(), '등급'] if not grade_achievement.empty else 'N/A'
+            worst_rate = grade_achievement['평균달성률(%)'].min() if not grade_achievement.empty else 0
+            st.metric("최저 달성률 등급", f"{worst_grade}등급", f"{worst_rate:.1f}%")
+        
+        with col3:
+            best_share_grade = grade_achievement.loc[grade_achievement['점유율(%)'].idxmax(), '등급'] if not grade_achievement.empty else 'N/A'
+            best_share = grade_achievement['점유율(%)'].max() if not grade_achievement.empty else 0
+            st.metric("최고 점유율 등급", f"{best_share_grade}등급", f"{best_share:.2f}%")
+        
+        with col4:
+            total_grades = len(grade_achievement[grade_achievement['등급'] != '미분류'])
+            st.metric("등급 분포", f"{total_grades}개 등급", f"{grade_achievement['총판수'].sum()}개 총판")
+        
+        st.markdown("---")
+        
+        # 차트
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # 등급별 평균 달성률
+            fig1 = px.bar(
+                grade_achievement,
+                x='등급',
+                y='평균달성률(%)',
+                title="등급별 평균 달성률",
+                text='평균달성률(%)',
+                color='평균달성률(%)',
+                color_continuous_scale='RdYlGn'
+            )
+            fig1.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig1.add_hline(y=100, line_dash="dash", line_color="red", annotation_text="목표선")
+            fig1.update_layout(height=400)
+            st.plotly_chart(fig1, use_container_width=True)
+        
+        with col2:
+            # 등급별 목표 vs 실적
+            fig2 = go.Figure()
+            fig2.add_trace(go.Bar(
+                x=grade_achievement['등급'],
+                y=grade_achievement['목표합계'],
+                name='목표',
+                marker_color='lightblue',
+                text=grade_achievement['목표합계'],
+                texttemplate='%{text:,.0f}',
+                textposition='outside'
+            ))
+            fig2.add_trace(go.Bar(
+                x=grade_achievement['등급'],
+                y=grade_achievement['실적합계'],
+                name='실적',
+                marker_color='orange',
+                text=grade_achievement['실적합계'],
+                texttemplate='%{text:,.0f}',
+                textposition='outside'
+            ))
+            fig2.update_layout(
+                title="등급별 목표 vs 실적",
+                barmode='group',
+                height=400
+            )
+            st.plotly_chart(fig2, use_container_width=True)
+        
+        # 등급별 점유율 및 효율성
+        st.markdown("---")
+        st.markdown("#### 📈 등급별 시장 점유율 및 효율성")
+        
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            fig3 = px.bar(
+                grade_achievement,
+                x='등급',
+                y='점유율(%)',
+                title="등급별 학생수 대비 점유율",
+                text='점유율(%)',
+                color='점유율(%)',
+                color_continuous_scale='Blues'
+            )
+            fig3.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+            fig3.update_layout(height=400)
+            st.plotly_chart(fig3, use_container_width=True)
+        
+        with col2:
+            fig4 = px.bar(
+                grade_achievement,
+                x='등급',
+                y='총판당평균실적',
+                title="등급별 총판당 평균 실적",
+                text='총판당평균실적',
+                color='총판당평균실적',
+                color_continuous_scale='Greens'
+            )
+            fig4.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+            fig4.update_layout(height=400)
+            st.plotly_chart(fig4, use_container_width=True)
+        
+        # 상세 테이블
+        st.markdown("---")
+        st.markdown("#### 📋 등급별 상세 데이터")
+        
+        display_df = grade_achievement[[
+            '등급', '총판수', '목표합계', '실적합계', '평균달성률(%)', 
+            '시장규모', '점유율(%)', '거래학교수', '총판당평균실적'
+        ]].copy()
+        
+        st.dataframe(
+            display_df.style.format({
+                '총판수': '{:,.0f}',
+                '목표합계': '{:,.0f}',
+                '실적합계': '{:,.0f}',
+                '평균달성률(%)': '{:.1f}',
+                '시장규모': '{:,.0f}',
+                '점유율(%)': '{:.2f}',
+                '거래학교수': '{:,.0f}',
+                '총판당평균실적': '{:,.0f}'
+            }).background_gradient(subset=['평균달성률(%)'], cmap='RdYlGn', vmin=0, vmax=150)
+              .background_gradient(subset=['점유율(%)'], cmap='Blues'),
+            use_container_width=True
+        )
+        
+        # 등급별 총판 리스트
+        st.markdown("---")
+        st.markdown("#### 🔍 등급별 총판 상세")
+        
+        selected_grade = st.selectbox(
+            "등급 선택",
+            grade_achievement['등급'].tolist(),
+            key="grade_detail_select"
+        )
+        
+        if selected_grade:
+            grade_data = achievement_df[achievement_df['등급'] == selected_grade].copy()
+            grade_data = grade_data.sort_values('전체달성률(%)', ascending=False)
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric(f"{selected_grade}등급 총판 수", f"{len(grade_data)}개")
+            with col2:
+                avg_rate = grade_data['전체달성률(%)'].mean()
+                st.metric(f"{selected_grade}등급 평균 달성률", f"{avg_rate:.1f}%")
+            with col3:
+                achieved = len(grade_data[grade_data['전체달성률(%)'] >= 100])
+                st.metric(f"{selected_grade}등급 목표달성", f"{achieved}/{len(grade_data)}개")
+            
+            st.markdown(f"**{selected_grade}등급 총판 리스트**")
+            st.dataframe(
+                grade_data[[
+                    '총판', '전체목표', '실적부수', '전체달성률(%)', '차이',
+                    '시장규모', '점유율(%)', '거래학교수'
+                ]].style.format({
+                    '전체목표': '{:,.0f}',
+                    '실적부수': '{:,.0f}',
+                    '전체달성률(%)': '{:.1f}',
+                    '차이': '{:,.0f}',
+                    '시장규모': '{:,.0f}',
+                    '점유율(%)': '{:.2f}',
+                    '거래학교수': '{:,.0f}'
+                }).background_gradient(subset=['전체달성률(%)'], cmap='RdYlGn', vmin=0, vmax=150),
+                use_container_width=True,
+                height=400
+            )
     
     col1, col2 = st.columns(2)
     
