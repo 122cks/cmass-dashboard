@@ -94,7 +94,7 @@ st.sidebar.markdown("---")
 st.sidebar.info(f"📊 선택된 총판: {len(selected_distributors)}개")
 
 # Main content tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📊 종합 비교", "📈 실적 대비", "🗺️ 지역별 분포", "📚 과목별 분석"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 종합 비교", "📈 실적 대비", "🗺️ 지역별 분포", "📚 과목별 분석", "⚖️ 점유율 유사 총판", "👥 학생수 유사 총판"])
 
 with tab1:
     st.subheader("총판별 종합 성과 비교")
@@ -663,6 +663,251 @@ with tab4:
             file_name="총판비교_과목별_분석.csv",
             mime="text/csv"
         )
+
+with tab5:
+    st.subheader("⚖️ 점유율이 유사한 총판 분석")
+    
+    # Get all distributor stats with market share
+    distributor_market = st.session_state.get('distributor_market', pd.DataFrame())
+    
+    if not distributor_market.empty and '점유율(%)' in distributor_market.columns:
+        # Select a reference distributor from selected ones
+        ref_dist = st.selectbox("기준 총판 선택", selected_distributors, key="ref_share")
+        
+        # Get reference market share
+        ref_row = comparison_stats_df[comparison_stats_df['총판'] == ref_dist]
+        if not ref_row.empty:
+            ref_share = ref_row.iloc[0]['점유율(%)']
+            
+            # Find similar distributors (within ±20% range)
+            all_dist_stats = []
+            for dist in order_df['총판'].unique():
+                dist_data = order_df[order_df['총판'] == dist]
+                school_code_col = '정보공시학교코드' if '정보공시학교코드' in dist_data.columns else '학교코드'
+                
+                # Get market size from distributor_market
+                dist_market_row = distributor_market[distributor_market['총판명(공식)'].str.contains(dist.split(')')[-1] if ')' in dist else dist, na=False)]
+                if not dist_market_row.empty:
+                    market_size = dist_market_row.iloc[0]['시장규모']
+                else:
+                    market_size = 0
+                
+                orders = dist_data['부수'].sum()
+                share = (orders / market_size * 100) if market_size > 0 else 0
+                
+                all_dist_stats.append({
+                    '총판': dist,
+                    '주문부수': orders,
+                    '시장규모': market_size,
+                    '점유율(%)': share,
+                    '거래학교수': dist_data[school_code_col].nunique() if school_code_col in dist_data.columns else 0
+                })
+            
+            all_dist_df = pd.DataFrame(all_dist_stats)
+            
+            # Filter similar (within ±2% range)
+            similar_range = 2.0
+            similar_dists = all_dist_df[
+                (all_dist_df['점유율(%)'] >= ref_share - similar_range) & 
+                (all_dist_df['점유율(%)'] <= ref_share + similar_range) &
+                (all_dist_df['총판'] != ref_dist)
+            ].sort_values('점유율(%)', ascending=False).head(10)
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("기준 총판", ref_dist)
+            with col2:
+                st.metric("기준 점유율", f"{ref_share:.2f}%")
+            with col3:
+                st.metric("유사 총판 수", f"{len(similar_dists)}개")
+            
+            st.markdown("---")
+            
+            if not similar_dists.empty:
+                # Comparison chart
+                compare_df = pd.concat([
+                    ref_row[['총판', '주문부수', '점유율(%)', '거래학교수']],
+                    similar_dists[['총판', '주문부수', '점유율(%)', '거래학교수']]
+                ]).head(11)
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    fig1 = px.bar(
+                        compare_df,
+                        x='총판',
+                        y='점유율(%)',
+                        title=f"점유율 비교 (기준: {ref_dist})",
+                        text='점유율(%)',
+                        color='점유율(%)',
+                        color_continuous_scale='Blues'
+                    )
+                    fig1.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+                    fig1.update_layout(xaxis_tickangle=-45, showlegend=False)
+                    fig1.add_hline(y=ref_share, line_dash="dash", line_color="red", 
+                                  annotation_text=f"{ref_dist} 기준")
+                    st.plotly_chart(fig1, use_container_width=True)
+                
+                with col2:
+                    fig2 = px.scatter(
+                        compare_df,
+                        x='거래학교수',
+                        y='주문부수',
+                        size='점유율(%)',
+                        color='점유율(%)',
+                        hover_name='총판',
+                        title="학교수 vs 주문부수 (크기=점유율)",
+                        labels={'거래학교수': '거래 학교 수', '주문부수': '주문 부수'}
+                    )
+                    st.plotly_chart(fig2, use_container_width=True)
+                
+                st.markdown("---")
+                st.subheader("📊 유사 총판 상세 비교")
+                
+                st.dataframe(
+                    compare_df.style.format({
+                        '주문부수': '{:,.0f}',
+                        '시장규모': '{:,.0f}',
+                        '점유율(%)': '{:.2f}',
+                        '거래학교수': '{:,.0f}'
+                    }).background_gradient(subset=['점유율(%)'], cmap='RdYlGn'),
+                    use_container_width=True
+                )
+                
+                st.info(f"💡 **분석 인사이트**: 점유율이 유사한 총판들을 비교하여 효율성과 전략을 벤치마킹할 수 있습니다.")
+            else:
+                st.warning(f"⚠️ {ref_dist}와 점유율이 유사한 총판이 없습니다. (±{similar_range}% 범위)")
+    else:
+        st.warning("⚠️ 점유율 데이터가 없습니다. 시장규모 정보를 확인해주세요.")
+
+with tab6:
+    st.subheader("👥 학생수(시장규모)가 유사한 총판 분석")
+    
+    distributor_market = st.session_state.get('distributor_market', pd.DataFrame())
+    
+    if not distributor_market.empty and '시장규모' in distributor_market.columns:
+        # Select a reference distributor
+        ref_dist2 = st.selectbox("기준 총판 선택", selected_distributors, key="ref_market")
+        
+        # Get reference market size
+        ref_row2 = comparison_stats_df[comparison_stats_df['총판'] == ref_dist2]
+        if not ref_row2.empty:
+            ref_market = ref_row2.iloc[0]['시장규모']
+            
+            # Find similar distributors by market size (within ±20%)
+            all_dist_stats2 = []
+            for dist in order_df['총판'].unique():
+                dist_data = order_df[order_df['총판'] == dist]
+                school_code_col = '정보공시학교코드' if '정보공시학교코드' in dist_data.columns else '학교코드'
+                
+                # Get market size
+                dist_market_row = distributor_market[distributor_market['총판명(공식)'].str.contains(dist.split(')')[-1] if ')' in dist else dist, na=False)]
+                if not dist_market_row.empty:
+                    market_size = dist_market_row.iloc[0]['시장규모']
+                else:
+                    market_size = 0
+                
+                orders = dist_data['부수'].sum()
+                share = (orders / market_size * 100) if market_size > 0 else 0
+                
+                all_dist_stats2.append({
+                    '총판': dist,
+                    '주문부수': orders,
+                    '시장규모': market_size,
+                    '점유율(%)': share,
+                    '거래학교수': dist_data[school_code_col].nunique() if school_code_col in dist_data.columns else 0
+                })
+            
+            all_dist_df2 = pd.DataFrame(all_dist_stats2)
+            
+            # Filter similar market size (within ±20%)
+            similar_market = all_dist_df2[
+                (all_dist_df2['시장규모'] >= ref_market * 0.8) & 
+                (all_dist_df2['시장규모'] <= ref_market * 1.2) &
+                (all_dist_df2['총판'] != ref_dist2) &
+                (all_dist_df2['시장규모'] > 0)
+            ].sort_values('시장규모', ascending=False).head(10)
+            
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("기준 총판", ref_dist2)
+            with col2:
+                st.metric("기준 시장규모", f"{ref_market:,.0f}명")
+            with col3:
+                st.metric("유사 총판 수", f"{len(similar_market)}개")
+            
+            st.markdown("---")
+            
+            if not similar_market.empty:
+                # Comparison
+                compare_df2 = pd.concat([
+                    ref_row2[['총판', '주문부수', '시장규모', '점유율(%)', '거래학교수']],
+                    similar_market[['총판', '주문부수', '시장규모', '점유율(%)', '거래학교수']]
+                ]).head(11)
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    fig1 = px.bar(
+                        compare_df2,
+                        x='총판',
+                        y='시장규모',
+                        title=f"시장규모 비교 (기준: {ref_dist2})",
+                        text='시장규모',
+                        color='시장규모',
+                        color_continuous_scale='Greens'
+                    )
+                    fig1.update_traces(texttemplate='%{text:,.0f}명', textposition='outside')
+                    fig1.update_layout(xaxis_tickangle=-45, showlegend=False)
+                    fig1.add_hline(y=ref_market, line_dash="dash", line_color="red",
+                                  annotation_text=f"{ref_dist2} 기준")
+                    st.plotly_chart(fig1, use_container_width=True)
+                
+                with col2:
+                    # Market size가 비슷한 경우, 점유율 차이가 핵심 지표
+                    fig2 = px.bar(
+                        compare_df2.sort_values('점유율(%)', ascending=False),
+                        x='총판',
+                        y='점유율(%)',
+                        title="유사 시장규모 총판의 점유율 비교",
+                        text='점유율(%)',
+                        color='점유율(%)',
+                        color_continuous_scale='RdYlGn'
+                    )
+                    fig2.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+                    fig2.update_layout(xaxis_tickangle=-45, showlegend=False)
+                    st.plotly_chart(fig2, use_container_width=True)
+                
+                st.markdown("---")
+                st.subheader("📊 시장규모 유사 총판 상세 비교")
+                
+                # Add efficiency metric
+                compare_df2['학교당평균'] = compare_df2['주문부수'] / compare_df2['거래학교수']
+                
+                st.dataframe(
+                    compare_df2[['총판', '시장규모', '주문부수', '점유율(%)', '거래학교수', '학교당평균']].style.format({
+                        '시장규모': '{:,.0f}',
+                        '주문부수': '{:,.0f}',
+                        '점유율(%)': '{:.2f}',
+                        '거래학교수': '{:,.0f}',
+                        '학교당평균': '{:.1f}'
+                    }).background_gradient(subset=['점유율(%)'], cmap='RdYlGn'),
+                    use_container_width=True
+                )
+                
+                st.success(f"💡 **분석 인사이트**: 시장규모가 비슷한 총판 간 점유율 차이는 영업 효율성과 전략의 차이를 나타냅니다.")
+                
+                # Performance gap analysis
+                if len(compare_df2) > 1:
+                    max_share = compare_df2['점유율(%)'].max()
+                    min_share = compare_df2['점유율(%)'].min()
+                    gap = max_share - min_share
+                    
+                    st.info(f"📈 **점유율 격차**: 최고 {max_share:.2f}% vs 최저 {min_share:.2f}% = {gap:.2f}%p 차이")
+            else:
+                st.warning(f"⚠️ {ref_dist2}와 시장규모가 유사한 총판이 없습니다. (±20% 범위)")
+    else:
+        st.warning("⚠️ 시장규모 데이터가 없습니다.")
 
 st.markdown("---")
 st.caption("🔄 총판 비교 분석 페이지")

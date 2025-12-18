@@ -172,7 +172,7 @@ if '총판' in filtered_order_df.columns:
     st.markdown("---")
     
     # Tab Layout
-    tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📊 총판별 현황", "🎯 목표 대비 실적", "📈 실적 비교", "🎯 성과 분석", "💡 효율성 분석", "📋 상세 테이블"])
+    tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📊 총판별 현황", "🎯 목표 대비 실적", "📈 실적 비교", "🎯 성과 분석", "💡 효율성 분석", "🗺️ 시군구별 분석", "📋 상세 테이블"])
     
     with tab1:
         st.subheader("총판별 판매 현황")
@@ -903,6 +903,241 @@ if '총판' in filtered_order_df.columns:
                      help="HHI (Herfindahl-Hirschman Index): 시장 집중도 지표")
     
     with tab6:
+        st.subheader("🗺️ 시군구별 총판 분석")
+        
+        # Extract region info from orders
+        if '시도교육청' in filtered_order_df.columns and '시군구' in filtered_order_df.columns:
+            # Region-level aggregation
+            region_stats = filtered_order_df.groupby('시군구').agg({
+                '부수': 'sum',
+                '총판': 'nunique',
+                '정보공시학교코드' if '정보공시학교코드' in filtered_order_df.columns else '학교코드': 'nunique'
+            }).reset_index()
+            region_stats.columns = ['시군구', '주문부수', '총판수', '학교수']
+            region_stats = region_stats.sort_values('주문부수', ascending=False)
+            
+            st.markdown("### 📍 시군구별 주문 현황")
+            
+            col1, col2 = st.columns([2, 1])
+            
+            with col1:
+                # Top regions chart
+                fig = px.bar(
+                    region_stats.head(20),
+                    x='시군구',
+                    y='주문부수',
+                    title="시군구별 주문량 TOP 20",
+                    text='주문부수',
+                    color='총판수',
+                    color_continuous_scale='Viridis',
+                    hover_data=['학교수']
+                )
+                fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+                fig.update_layout(xaxis_tickangle=-45, height=500)
+                st.plotly_chart(fig, use_container_width=True)
+            
+            with col2:
+                # Region distribution pie
+                fig_pie = px.pie(
+                    region_stats.head(10),
+                    values='주문부수',
+                    names='시군구',
+                    title="상위 10개 시군구 비중"
+                )
+                st.plotly_chart(fig_pie, use_container_width=True)
+            
+            st.markdown("---")
+            st.markdown("### 🔍 시군구 상세 분석")
+            
+            # Select region for detailed analysis
+            selected_region = st.selectbox(
+                "시군구 선택",
+                region_stats['시군구'].tolist(),
+                key="region_select"
+            )
+            
+            if selected_region:
+                region_orders = filtered_order_df[filtered_order_df['시군구'] == selected_region]
+                
+                # Region summary
+                col1, col2, col3, col4 = st.columns(4)
+                with col1:
+                    st.metric("총 주문부수", f"{region_orders['부수'].sum():,.0f}부")
+                with col2:
+                    st.metric("활동 총판 수", f"{region_orders['총판'].nunique()}개")
+                with col3:
+                    school_col = '정보공시학교코드' if '정보공시학교코드' in region_orders.columns else '학교코드'
+                    st.metric("학교 수", f"{region_orders[school_col].nunique()}개")
+                with col4:
+                    avg_per_dist = region_orders['부수'].sum() / region_orders['총판'].nunique()
+                    st.metric("총판당 평균", f"{avg_per_dist:,.0f}부")
+                
+                st.markdown("---")
+                
+                # Distributor comparison within region
+                st.markdown(f"#### 📊 {selected_region} 내 총판별 비교")
+                
+                region_dist_stats = region_orders.groupby('총판').agg({
+                    '부수': 'sum',
+                    school_col: 'nunique',
+                    '금액': 'sum' if '금액' in region_orders.columns else 'count'
+                }).reset_index()
+                region_dist_stats.columns = ['총판', '주문부수', '학교수', '주문금액']
+                region_dist_stats['지역점유율(%)'] = (region_dist_stats['주문부수'] / region_dist_stats['주문부수'].sum()) * 100
+                region_dist_stats['학교당평균'] = region_dist_stats['주문부수'] / region_dist_stats['학교수']
+                region_dist_stats = region_dist_stats.sort_values('주문부수', ascending=False)
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    # Distributor ranking in region
+                    fig_dist = px.bar(
+                        region_dist_stats,
+                        y='총판',
+                        x='주문부수',
+                        orientation='h',
+                        title=f"{selected_region} 총판별 주문량",
+                        text='주문부수',
+                        color='지역점유율(%)',
+                        color_continuous_scale='RdYlGn'
+                    )
+                    fig_dist.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+                    fig_dist.update_layout(yaxis={'categoryorder': 'total ascending'}, height=400)
+                    st.plotly_chart(fig_dist, use_container_width=True)
+                
+                with col2:
+                    # Market share pie in region
+                    fig_share = px.pie(
+                        region_dist_stats,
+                        values='주문부수',
+                        names='총판',
+                        title=f"{selected_region} 총판별 점유율"
+                    )
+                    fig_share.update_traces(textposition='inside', textinfo='percent+label')
+                    st.plotly_chart(fig_share, use_container_width=True)
+                
+                # Detailed table
+                st.markdown("---")
+                st.subheader(f"📋 {selected_region} 총판 상세 데이터")
+                
+                st.dataframe(
+                    region_dist_stats.style.format({
+                        '주문부수': '{:,.0f}',
+                        '학교수': '{:,.0f}',
+                        '주문금액': '{:,.0f}',
+                        '지역점유율(%)': '{:.2f}',
+                        '학교당평균': '{:.1f}'
+                    }).background_gradient(subset=['지역점유율(%)'], cmap='Greens'),
+                    use_container_width=True
+                )
+                
+                # Competitive analysis
+                st.markdown("---")
+                st.markdown(f"#### ⚖️ {selected_region} 경쟁 구도 분석")
+                
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    # Market leader
+                    leader = region_dist_stats.iloc[0]
+                    st.success(f"**1위 총판**: {leader['총판']}")
+                    st.write(f"점유율: {leader['지역점유율(%)']:.1f}%")
+                    st.write(f"주문: {leader['주문부수']:,.0f}부")
+                
+                with col2:
+                    # Competition intensity
+                    if len(region_dist_stats) > 1:
+                        top2_share = region_dist_stats.head(2)['지역점유율(%)'].sum()
+                        competition = "높음" if top2_share < 60 else "중간" if top2_share < 80 else "낮음"
+                        st.info(f"**경쟁 강도**: {competition}")
+                        st.write(f"상위 2개사 점유율: {top2_share:.1f}%")
+                    else:
+                        st.info("**경쟁 강도**: 독점")
+                
+                with col3:
+                    # Number of competitors
+                    active_dists = len(region_dist_stats)
+                    st.warning(f"**활동 총판**: {active_dists}개사")
+                    if active_dists > 5:
+                        st.write("높은 경쟁 시장")
+                    elif active_dists > 2:
+                        st.write("적정 경쟁 시장")
+                    else:
+                        st.write("과점 시장")
+            
+            # Regional comparison
+            st.markdown("---")
+            st.markdown("### 🗺️ 시군구 간 비교 분석")
+            
+            # Top regions comparison
+            top_regions = region_stats.head(10)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                # Orders per school by region
+                region_stats['학교당평균'] = region_stats['주문부수'] / region_stats['학교수']
+                top_efficient_regions = region_stats.nlargest(10, '학교당평균')
+                
+                fig_eff = px.bar(
+                    top_efficient_regions,
+                    x='시군구',
+                    y='학교당평균',
+                    title="학교당 평균 주문량 TOP 10 시군구",
+                    text='학교당평균',
+                    color='학교당평균',
+                    color_continuous_scale='Blues'
+                )
+                fig_eff.update_traces(texttemplate='%{text:.1f}', textposition='outside')
+                fig_eff.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig_eff, use_container_width=True)
+            
+            with col2:
+                # Distributor density by region
+                region_stats['총판밀도'] = region_stats['총판수'] / region_stats['학교수']
+                top_density = region_stats.nlargest(10, '총판밀도')
+                
+                fig_density = px.bar(
+                    top_density,
+                    x='시군구',
+                    y='총판밀도',
+                    title="학교당 총판 수 TOP 10 시군구 (경쟁도)",
+                    text='총판밀도',
+                    color='총판밀도',
+                    color_continuous_scale='Reds'
+                )
+                fig_density.update_traces(texttemplate='%{text:.2f}', textposition='outside')
+                fig_density.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig_density, use_container_width=True)
+        
+        elif '시도교육청' in filtered_order_df.columns:
+            st.info("💡 시군구 정보가 없습니다. 시도 단위로 분석합니다.")
+            
+            # Fallback to 시도 level
+            sido_stats = filtered_order_df.groupby('시도교육청').agg({
+                '부수': 'sum',
+                '총판': 'nunique',
+                '정보공시학교코드' if '정보공시학교코드' in filtered_order_df.columns else '학교코드': 'nunique'
+            }).reset_index()
+            sido_stats.columns = ['시도', '주문부수', '총판수', '학교수']
+            sido_stats = sido_stats.sort_values('주문부수', ascending=False)
+            
+            fig = px.bar(
+                sido_stats,
+                x='시도',
+                y='주문부수',
+                title="시도별 주문량",
+                text='주문부수',
+                color='총판수',
+                color_continuous_scale='Viridis'
+            )
+            fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+            fig.update_layout(xaxis_tickangle=-45)
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.warning("⚠️ 지역 정보가 없습니다.")
+    
+    with tab7:
         st.subheader("📋 총판별 상세 데이터")
         
         # Search
