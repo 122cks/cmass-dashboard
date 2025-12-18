@@ -169,7 +169,8 @@ with tab1:
             dist_info = distributor_df[distributor_df['총판명(공식)'] == dist]
             if dist_info.empty:
                 # Try partial match
-                dist_info = distributor_df[distributor_df['총판명(공식)'].str.contains(dist.split(')')[-1], na=False)]
+                pattern = dist.split(')')[-1] if ')' in dist else dist
+                dist_info = distributor_df[distributor_df['총판명(공식)'].str.contains(pattern, na=False)]
             if not dist_info.empty:
                 stats['등급'] = dist_info.iloc[0].get('등급', '-')
             else:
@@ -688,7 +689,8 @@ with tab5:
                 school_code_col = '정보공시학교코드' if '정보공시학교코드' in dist_data.columns else '학교코드'
                 
                 # Get market size from distributor_market
-                dist_market_row = distributor_market[distributor_market['총판명(공식)'].str.contains(dist.split(')')[-1] if ')' in dist else dist, na=False)]
+                pattern = dist.split(')')[-1] if ')' in dist else dist
+                dist_market_row = distributor_market[distributor_market['총판명(공식)'].str.contains(pattern, na=False)]
                 if not dist_market_row.empty:
                     market_size = dist_market_row.iloc[0]['시장규모']
                 else:
@@ -792,7 +794,7 @@ with tab6:
         ref_dist2 = st.selectbox("기준 총판 선택", selected_distributors, key="ref_market")
         
         # Get reference market size
-        ref_row = comparison_df[comparison_df['총판'] == ref_dist]
+        ref_row2 = comparison_df[comparison_df['총판'] == ref_dist2]
         if not ref_row2.empty:
             ref_market = ref_row2.iloc[0]['시장규모']
             
@@ -803,7 +805,8 @@ with tab6:
                 school_code_col = '정보공시학교코드' if '정보공시학교코드' in dist_data.columns else '학교코드'
                 
                 # Get market size
-                dist_market_row = distributor_market[distributor_market['총판명(공식)'].str.contains(dist.split(')')[-1] if ')' in dist else dist, na=False)]
+                pattern = dist.split(')')[-1] if ')' in dist else dist
+                dist_market_row = distributor_market[distributor_market['총판명(공식)'].str.contains(pattern, na=False)]
                 if not dist_market_row.empty:
                     market_size = dist_market_row.iloc[0]['시장규모']
                 else:
