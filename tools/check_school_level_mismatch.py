@@ -11,7 +11,7 @@ print('\nproduct 학교급 unique values:')
 print(product['학교급'].dropna().unique()[:50])
 # prepare
 product = product.dropna(subset=['코드'])
-product['코드'] = product['코드'].astype(int).astype(str)
+product['코드'] = product['코드'].astype(int).astype(str).str.zfill(6)
 order['도서코드(교지명구분)'] = order['도서코드(교지명구분)'].astype(str)
 merge_cols = ['코드', '학교급', '교과군', '교과서명']
 pm = product[merge_cols].rename(columns={'교과군':'교과군_제품'})

@@ -1,9 +1,11 @@
 import streamlit as st
+from utils.style import apply_custom_style
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
 st.set_page_config(page_title="교과서별 분석", page_icon="📖", layout="wide")
+apply_custom_style()
 
 # Get data
 if 'order_df' not in st.session_state:

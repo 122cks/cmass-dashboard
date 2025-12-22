@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Local outputs (generated)
+outputs/*
+!outputs/distributor_code_mapping.csv
+!outputs/.gitkeep
+
+# Local scripts caches
+scripts/__pycache__/
+utils/__pycache__/
+tools/__pycache__/
+pages/__pycache__/
+dashboard/__pycache__/
+
+# Deployment trigger (optional)
+DEPLOY_TRIGGER.txt

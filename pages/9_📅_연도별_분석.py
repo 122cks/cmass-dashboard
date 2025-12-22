@@ -1,9 +1,11 @@
 import streamlit as st
+from utils.style import apply_custom_style
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
 st.set_page_config(page_title="연도별 분석", page_icon="📅", layout="wide")
+apply_custom_style()
 
 # 페이지 가이드
 st.markdown("""

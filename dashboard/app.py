@@ -3,8 +3,80 @@ import pandas as pd
 import plotly.express as px
 import os
 
+# --- Simple admin PIN auth (direct input) ---
+ADMIN_PIN = os.environ.get('ADMIN_PIN', '2274')
+LOCKOUT_SECONDS = int(os.environ.get('PIN_LOCKOUT_SECONDS', 300))
+MAX_ATTEMPTS = int(os.environ.get('PIN_MAX_ATTEMPTS', 3))
+
+if 'auth_ok' not in st.session_state:
+    st.session_state['auth_ok'] = False
+if 'auth_attempts' not in st.session_state:
+    st.session_state['auth_attempts'] = 0
+if 'auth_lock_until' not in st.session_state:
+    st.session_state['auth_lock_until'] = None
+
+import time
+
+def _is_locked():
+    lock_until = st.session_state.get('auth_lock_until')
+    if MAX_ATTEMPTS <= 0 or LOCKOUT_SECONDS <= 0:
+        return False
+    if lock_until and time.time() < lock_until:
+        return True
+    return False
+
+if not st.session_state.get('auth_ok', False):
+    if _is_locked():
+        remaining = int(st.session_state['auth_lock_until'] - time.time())
+        mins = remaining // 60
+        secs = remaining % 60
+        st.error(f"비밀번호 시도 횟수 초과: 잠금 상태입니다. 남은 시간 {mins}분 {secs}초")
+        st.stop()
+
+    st.markdown("""
+    <div style='max-width:520px;margin:24px auto;padding:20px;background:#0b2b3a;border-radius:10px'>
+    <h3 style='color:#fff;text-align:center;margin:0 0 12px 0'>관리자 PIN 입력</h3>
+    </div>
+    """, unsafe_allow_html=True)
+
+    with st.form('pin_form'):
+        entered = st.text_input('PIN', value='', type='password', placeholder='PIN을 입력하세요')
+        submitted = st.form_submit_button('로그인')
+        if submitted:
+            if entered.strip() == ADMIN_PIN:
+                st.session_state['auth_ok'] = True
+                st.session_state['auth_attempts'] = 0
+                st.session_state['auth_lock_until'] = None
+                st.experimental_rerun()
+            else:
+                st.session_state['auth_attempts'] += 1
+                if st.session_state['auth_attempts'] >= MAX_ATTEMPTS:
+                    st.session_state['auth_lock_until'] = time.time() + LOCKOUT_SECONDS
+                st.error('PIN이 올바르지 않습니다.')
+                st.stop()
+
+
 # Set page config
 st.set_page_config(page_title="CMASS 실적표 조회", layout="wide")
+
+# If this dashboard entrypoint is being used as the deployed main file,
+# delegate execution to the root `app.py` so Streamlit's multi-page loader
+# (pages/ folder) and the canonical app logic are used. This keeps behavior
+# identical whether the Cloud entrypoint is `app.py` or `dashboard/app.py`.
+try:
+    BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    root_app_path = os.path.join(BASE_DIR, 'app.py')
+    if os.path.exists(root_app_path):
+        with open(root_app_path, 'r', encoding='utf-8') as _f:
+            code = _f.read()
+        # Ensure root app resolves relative paths correctly
+        g = globals()
+        g['__file__'] = root_app_path
+        exec(compile(code, root_app_path, 'exec'), g)
+        st.stop()
+except Exception:
+    # If delegation fails, continue with this simplified dashboard as fallback
+    pass
 
 # File Paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

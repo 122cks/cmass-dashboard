@@ -1,10 +1,39 @@
 import streamlit as st
+from utils.style import apply_custom_style
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
 st.set_page_config(page_title="목표 대비 달성률", page_icon="🎯", layout="wide")
+apply_custom_style()
+
+
+def _normalize_code(code_val) -> str:
+    """총판코드 값을 안전하게 정규화하여 문자열로 반환합니다.
+    - NaN 처리: 빈 문자열 반환
+    - 숫자/문자 혼용 처리: 문자열로 변환 후 쉼표/공백 제거
+    - 소수점 '.0' 제거: '123.0' -> '123'
+    - 숫자 형태인 경우 정수로 변환하여 소수점 제거
+    """
+    if pd.isna(code_val):
+        return ''
+    # 문자열 형태로 일단 변환
+    s = str(code_val).strip()
+    # 제거: 쉼표, 공백
+    s = s.replace(',', '').strip()
+    # 보통 Excel에서 불러오면 '123.0' 같은 케이스가 있음 -> 소수점 .0 제거
+    if s.endswith('.0'):
+        s = s[:-2]
+    # 시도: 숫자 변환 가능하면 정수 형태로 반환(소수점 없는 경우)
+    try:
+        f = float(s)
+        if f.is_integer():
+            return str(int(f))
+        # 소수인 경우는 소수 문자열 그대로 사용하되 불필요 공백 제거
+        return s
+    except Exception:
+        return s
 
 # Get data
 if 'order_df' not in st.session_state:
@@ -78,36 +107,115 @@ actual_stats.columns = ['총판', '실적부수', '거래학교수', '주문금�
 
 # 🎯 총판코드 매핑 테이블 먼저 생성
 dist_code_map = {}  # {총판코드: 총판명(공식)}
+mapping_source = None
 
-if not distributor_df.empty and '총판명(공식)' in distributor_df.columns and '총판코드' in distributor_df.columns:
-    for _, r in distributor_df.iterrows():
-        official = r.get('총판명(공식)')
-        code_val = r.get('총판코드')
-        
-        if pd.isna(official) or pd.isna(code_val):
-            continue
-        
-        official_str = str(official).strip()
-        
-        # 총판코드를 정규화 (123.0 → "123")
-        try:
-            if isinstance(code_val, (int, float)) and not pd.isna(code_val):
-                code_str = str(int(code_val)) if float(code_val).is_integer() else str(code_val).strip()
-            else:
-                code_str = str(code_val).strip()
-        except Exception:
-            code_str = str(code_val).strip()
-        
-        dist_code_map[code_str] = official_str
+if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
+    # Prefer 숫자코드 (총판정보.csv의 정식 코드), fallback to 총판코드
+    preferred_code_col = '숫자코드' if '숫자코드' in distributor_df.columns else ('총판코드' if '총판코드' in distributor_df.columns else None)
+    if preferred_code_col:
+        for _, r in distributor_df.iterrows():
+            official = r.get('총판명(공식)')
+            code_val = r.get(preferred_code_col)
+
+            if pd.isna(official) or pd.isna(code_val):
+                continue
+
+            official_str = str(official).strip()
+            code_str = _normalize_code(code_val)
+            if code_str == '':
+                continue
+            dist_code_map[code_str] = official_str
+        if dist_code_map:
+            mapping_source = f"distributor_df:{preferred_code_col}"
+
+# Prefer mapping loaded in session (app.py generated or precomputed mapping)
+if 'code_to_official' in st.session_state and st.session_state.get('code_to_official'):
+    try:
+        # session mapping keys are already normalized by app.py
+        dist_code_map = {
+            _normalize_code(k): str(v).strip()
+            for k, v in st.session_state['code_to_official'].items()
+            if _normalize_code(k) and str(v).strip() != ''
+        }
+        mapping_source = 'session_state:code_to_official'
+    except Exception:
+        pass
+
+# If still empty, try reading precomputed mapping CSV from outputs/
+if not dist_code_map:
+    try:
+        import os
+        base = os.path.dirname(os.path.dirname(__file__))
+        out_path = os.path.join(base, 'outputs', 'distributor_code_mapping.csv')
+        if os.path.exists(out_path):
+            dfm = pd.read_csv(out_path, dtype=str)
+            if 'order_code' in dfm.columns and 'official_name' in dfm.columns:
+                for _, r in dfm[dfm['matched'].astype(str).str.lower()=='true'].iterrows():
+                    k = _normalize_code(r.get('order_code'))
+                    v = str(r.get('official_name','')).strip()
+                    if k and v:
+                        dist_code_map[k] = v
+                if dist_code_map:
+                    mapping_source = 'outputs:distributor_code_mapping.csv'
+    except Exception:
+        pass
 
 st.sidebar.info(f"✅ 총판코드 매핑: {len(dist_code_map)}개 총판")
+
+# --- 관리자 전용 디버그 패널: 배포 환경에서 미매핑 원인 추적
+if bool(st.session_state.get('auth_ok', False)):
+    try:
+        import os
+        from datetime import datetime
+
+        with st.sidebar.expander('🛠️ 디버그(매핑 경로/미매핑 Top)', expanded=False):
+            base = os.path.dirname(os.path.dirname(__file__))
+            out_path = os.path.join(base, 'outputs', 'distributor_code_mapping.csv')
+
+            st.markdown(f"**매핑 소스:** {mapping_source or 'unknown'}")
+            st.markdown(f"**cwd:** {os.getcwd()}")
+            st.markdown(f"**page file:** {__file__}")
+            st.markdown(f"**outputs 매핑 파일:** {out_path}")
+            st.markdown(f"**outputs 존재:** {os.path.exists(out_path)}")
+            if os.path.exists(out_path):
+                st.markdown(f"**outputs 수정시각:** {datetime.fromtimestamp(os.path.getmtime(out_path)).strftime('%Y-%m-%d %H:%M:%S')}")
+
+            st.markdown(f"**dist_code_map 크기:** {len(dist_code_map)}")
+            st.markdown(f"**distributor_df 컬럼:** {', '.join(list(distributor_df.columns)) if not distributor_df.empty else '(empty)'}")
+
+            if '총판코드' in order_2026.columns:
+                tmp = order_2026.copy()
+                tmp['총판코드_정규화_dbg'] = tmp['총판코드'].apply(lambda x: _normalize_code(x))
+                mapped_codes = set(dist_code_map.keys())
+                unique_codes = sorted([c for c in tmp['총판코드_정규화_dbg'].unique() if c != ''])
+                empty_code_rows = int((tmp['총판코드_정규화_dbg'] == '').sum())
+                st.markdown(f"**주문 유니크 코드:** {len(unique_codes)}")
+                st.markdown(f"**코드 빈값 행:** {empty_code_rows:,}")
+
+                # 미매핑 Top (부수 기준)
+                tmp['부수_dbg'] = pd.to_numeric(tmp.get('부수', 0), errors='coerce').fillna(0)
+                unmapped_codes = [c for c in unique_codes if c not in mapped_codes]
+                st.markdown(f"**미매핑 유니크 코드:** {len(unmapped_codes)}")
+                if unmapped_codes:
+                    top_unmapped = (
+                        tmp[tmp['총판코드_정규화_dbg'].isin(unmapped_codes)]
+                        .groupby('총판코드_정규화_dbg')['부수_dbg']
+                        .sum()
+                        .reset_index()
+                        .sort_values('부수_dbg', ascending=False)
+                        .head(20)
+                    )
+                    st.dataframe(top_unmapped, use_container_width=True)
+            else:
+                st.markdown('**주문 데이터에 총판코드 컬럼이 없습니다.**')
+    except Exception:
+        # 디버그 패널은 본 로직에 영향을 주지 않도록 조용히 실패
+        pass
 
 # 목표 데이터를 총판코드로 그룹화
 if '총판코드' in target_summary.columns:
     # 총판코드 정규화
-    target_summary['총판코드_정규화'] = target_summary['총판코드'].apply(lambda x: 
-        str(int(x)) if isinstance(x, (int, float)) and not pd.isna(x) and float(x).is_integer() 
-        else str(x).strip() if pd.notna(x) else '')
+    target_summary['총판코드_정규화'] = target_summary['총판코드'].apply(lambda x: _normalize_code(x))
     
     # 총판코드별 목표 집계 후 공식명 매핑
     target_by_code = target_summary.groupby('총판코드_정규화').agg({
@@ -133,9 +241,7 @@ else:
 # --- 미매핑 총판 보고 (총판코드 기준)
 if '총판코드' in order_2026.columns:
     # 총판코드 정규화
-    order_2026['총판코드_정규화'] = order_2026['총판코드'].apply(lambda x: 
-        str(int(x)) if isinstance(x, (int, float)) and not pd.isna(x) and float(x).is_integer() 
-        else str(x).strip() if pd.notna(x) else '')
+    order_2026['총판코드_정규화'] = order_2026['총판코드'].apply(lambda x: _normalize_code(x))
     
     mapped_codes = set(dist_code_map.keys())
     order_totals = order_2026.groupby(['총판', '총판코드_정규화'])['부수'].sum().reset_index()
@@ -166,24 +272,14 @@ def _map_row_to_official(row):
     """총판코드로만 매핑 (이름 기반 매핑 제거)"""
     if '총판코드' in row.index and pd.notna(row.get('총판코드')):
         code_val = row.get('총판코드')
-        try:
-            # 총판코드 정규화
-            if isinstance(code_val, (int, float)) and not pd.isna(code_val):
-                code_str = str(int(code_val)) if float(code_val).is_integer() else str(code_val).strip()
-            else:
-                code_str = str(code_val).strip()
-        except Exception:
-            code_str = str(code_val).strip()
-        
-        # 총판코드로 공식명 매핑
+        code_str = _normalize_code(code_val)
         if code_str in dist_code_map:
             return dist_code_map[code_str]
         else:
-            # 매핑 실패 - 총판코드 반환 (디버깅용)
             return f"[미매핑:{code_str}]"
     
-    # 총판코드가 없으면 총판명 반환 (경고)
-    return f"[코드없음:{row.get('총판', 'N/A')}]"
+    # 총판코드가 없으면 코드 없음 표시 (원본 주문의 `총판` 명칭은 사용하지 않음)
+    return "[코드없음]"
 
 # Aggregate by original identifiers then map to official names
 if '총판코드' in order_actual_df.columns:
@@ -264,7 +360,7 @@ if not actual_official_df.empty and '총판코드' in order_2026.columns:
         
         # 해당 공식명에 매핑된 총판코드 찾기
         reverse_code_map = {v: k for k, v in dist_code_map.items()}
-        sel_code = reverse_code_map.get(sel)
+        sel_code = reverse_code_map.get(str(sel))
         
         if sel_code and '총판코드_정규화' in order_2026.columns:
             contrib_rows = order_2026[order_2026['총판코드_정규화'] == sel_code].copy()

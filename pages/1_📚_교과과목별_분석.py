@@ -1,4 +1,5 @@
 import streamlit as st
+from utils.style import apply_custom_style
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -9,6 +10,7 @@ import os
 from utils.common_filters import apply_common_filters, show_filter_summary
 
 st.set_page_config(page_title="교과/과목별 분석", page_icon="📚", layout="wide")
+apply_custom_style()
 
 # Get data from session state
 if 'total_df' not in st.session_state or 'order_df' not in st.session_state:

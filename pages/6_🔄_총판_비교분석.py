@@ -1,4 +1,5 @@
 import streamlit as st
+from utils.style import apply_custom_style
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
@@ -6,6 +7,7 @@ from plotly.subplots import make_subplots
 from typing import Mapping, Any, cast
 
 st.set_page_config(page_title="총판 비교분석", page_icon="🔄", layout="wide")
+apply_custom_style()
 
 # Get data
 if 'total_df' not in st.session_state or 'order_df' not in st.session_state:

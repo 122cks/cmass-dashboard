@@ -1,6 +1,33 @@
 import streamlit as st
 import pandas as pd
 import os
+import subprocess
+import sys
+from utils.style import apply_custom_style
+from typing import Any, cast
+
+
+def _normalize_code(code_val) -> str:
+    """Normalize distributor/order code to comparable string.
+    Handles numeric types, strings with commas, and Excel-style '123.0'.
+    """
+    if pd.isna(code_val):
+        return ''
+    s = str(code_val).strip()
+    s = s.replace(',', '').strip()
+    if s.endswith('.0'):
+        s = s[:-2]
+    try:
+        f = float(s)
+        if f.is_integer():
+            s = str(int(f))
+    except Exception:
+        pass
+
+    # 4자리 숫자 코드 유지(선행 0 보호). 예: '101' -> '0101'
+    if s.isdigit() and 0 < len(s) < 4:
+        s = s.zfill(4)
+    return s
 
 # Import utility modules from `utils` package
 from utils.market_size import calculate_market_size_by_subject
@@ -30,10 +57,51 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+apply_custom_style()
+
+# Development helper: non-admin cache/session reset when DEV_MODE=1
+DEV_MODE = os.environ.get('DEV_MODE', '0') == '1'
+if DEV_MODE:
+    with st.sidebar.expander('🐞 Dev Tools', expanded=False):
+        if st.button('♻️ Dev: 캐시 & 세션 초기화 (비관리자)', help='개발용: 캐시와 세션 상태를 초기화합니다.'):
+            try:
+                st.cache_data.clear()
+            except Exception:
+                pass
+            # Clear common session keys used by the app
+            for k in [
+                'total_df', 'order_df', 'order_df_original', 'order_df_target_filtered',
+                'target_df', 'product_df', 'distributor_df',
+                'market_analysis', 'market_size_by_level', 'distributor_market', 'subject_market_by_dist',
+                'code_to_official', 'official_to_code'
+            ]:
+                if k in st.session_state:
+                    del st.session_state[k]
+            st.experimental_rerun()
+
+# 관리자용: 캐시/세션 초기화 도구 (배포에서 stale cache로 데이터가 비어 보이는 문제 대응)
+if bool(st.session_state.get('auth_ok', False)):
+    with st.sidebar.expander('🛠️ 관리자 도구', expanded=False):
+        if st.button('♻️ 데이터 캐시 초기화', help='st.cache_data 캐시를 지우고 데이터를 다시 로드합니다.'):
+            try:
+                st.cache_data.clear()
+            except Exception:
+                pass
+            # 매핑/데이터 관련 세션 키 정리
+            for k in [
+                'total_df', 'order_df', 'order_df_original', 'order_df_target_filtered',
+                'target_df', 'product_df', 'distributor_df',
+                'market_analysis', 'market_size_by_level', 'distributor_market', 'subject_market_by_dist',
+                'code_to_official', 'official_to_code'
+            ]:
+                if k in st.session_state:
+                    del st.session_state[k]
+            st.rerun()
+
 # --- 관리자 PIN 기반 접근 제어 (업그레이드된 입력 모달) ---
 # 동작 요약:
 # - 환경변수 ADMIN_PIN으로 PIN 설정 가능(기본값 '2274')
-# - 4자리 PIN 입력 지원(숫자 패드 UI + 직접 입력)
+# - PIN 직접 입력 지원
 # - 실패 시 시도 횟수 누적, 3회 실패하면 5분 잠금
 
 ADMIN_PIN = os.environ.get('ADMIN_PIN', '2274')
@@ -46,8 +114,6 @@ if 'auth_attempts' not in st.session_state:
     st.session_state['auth_attempts'] = 0
 if 'auth_lock_until' not in st.session_state:
     st.session_state['auth_lock_until'] = None
-if 'pin_entry' not in st.session_state:
-    st.session_state['pin_entry'] = ''
 
 import time
 
@@ -73,144 +139,43 @@ if not st.session_state['auth_ok']:
             if st.button('세션 초기화', help='현재 브라우저 세션의 잠금을 해제합니다.'):
                 st.session_state['auth_attempts'] = 0
                 st.session_state['auth_lock_until'] = None
-                st.session_state['pin_entry'] = ''
                 st.rerun()
         with col_b:
             st.caption('잠금이 계속되면 시크릿 창에서 접속하거나, 관리자 환경변수로 PIN 잠금을 끌 수 있습니다(PIN_MAX_ATTEMPTS<=0 또는 PIN_LOCKOUT_SECONDS<=0).')
         st.stop()
 
-    # Modal-like centered box using container and CSS
+    # Centered auth box (direct input)
     st.markdown(
         """
         <style>
-        .pin-display{background:#fff;color:#000;padding:12px;border-radius:8px;text-align:center;font-size:22px;margin-bottom:12px}
-        .pin-btn{background:#2b7be9;color:#fff;padding:10px 12px;margin:4px;border-radius:6px;border:none;font-size:18px}
-        .pin-btn-secondary{background:#6c757d}
-        .pin-container{max-width:760px;margin:32px auto;padding:20px;background:#0b2b3a;border-radius:12px}
+        .pin-container{max-width:520px;margin:32px auto;padding:20px;background:#0b2b3a;border-radius:12px}
+        .pin-title{margin:0 0 12px 0; text-align:center; color:#fff}
         </style>
         """,
         unsafe_allow_html=True
     )
 
     st.markdown('<div class="pin-container">', unsafe_allow_html=True)
-    st.markdown('<h3 style="margin:0 0 8px 0; text-align:center; color:#fff">관리자 PIN 입력</h3>', unsafe_allow_html=True)
+    st.markdown('<h3 class="pin-title">관리자 PIN 입력</h3>', unsafe_allow_html=True)
 
-    # PIN masked display
-    masked = '•' * len(st.session_state['pin_entry'])
-    st.markdown(f'<div class="pin-display">{masked or "••••"}</div>', unsafe_allow_html=True)
-
-    # Numeric keypad layout
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button('1', key='pin_d1', use_container_width=True):
-            st.session_state['pin_entry'] += '1'
-            st.rerun()
-    with col2:
-        if st.button('2', key='pin_d2', use_container_width=True):
-            st.session_state['pin_entry'] += '2'
-            st.rerun()
-    with col3:
-        if st.button('3', key='pin_d3', use_container_width=True):
-            st.session_state['pin_entry'] += '3'
-            st.rerun()
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button('4', key='pin_d4', use_container_width=True):
-            st.session_state['pin_entry'] += '4'
-            st.rerun()
-    with col2:
-        if st.button('5', key='pin_d5', use_container_width=True):
-            st.session_state['pin_entry'] += '5'
-            st.rerun()
-    with col3:
-        if st.button('6', key='pin_d6', use_container_width=True):
-            st.session_state['pin_entry'] += '6'
-            st.rerun()
-
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button('7', key='pin_d7', use_container_width=True):
-            st.session_state['pin_entry'] += '7'
-            st.rerun()
-    with col2:
-        if st.button('8', key='pin_d8', use_container_width=True):
-            st.session_state['pin_entry'] += '8'
-            st.rerun()
-    with col3:
-        if st.button('9', key='pin_d9', use_container_width=True):
-            st.session_state['pin_entry'] += '9'
-            st.rerun()
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        if st.button('⌫', key='pin_backspace', use_container_width=True):
-            st.session_state['pin_entry'] = st.session_state['pin_entry'][:-1]
-            st.rerun()
-    with c2:
-        if st.button('0', key='pin_d0', use_container_width=True):
-            st.session_state['pin_entry'] += '0'
-            st.rerun()
-    with c3:
-        if st.button('지우기', key='pin_clear', use_container_width=True):
-            st.session_state['pin_entry'] = ''
-            st.rerun()
-
-    # Submit button (full width)
-    if st.button('✓ 입력', key='pin_submit', use_container_width=True):
-        entered = st.session_state.get('pin_entry', '').strip()
-        if entered == ADMIN_PIN:
-            st.session_state['auth_ok'] = True
-            st.session_state['auth_attempts'] = 0
-            st.session_state['auth_lock_until'] = None
-            st.rerun()
-        else:
-            st.session_state['auth_attempts'] += 1
-            if st.session_state['auth_attempts'] >= MAX_ATTEMPTS:
-                st.session_state['auth_lock_until'] = time.time() + LOCKOUT_SECONDS
-            st.session_state['pin_entry'] = ''
-            st.rerun()
+    with st.form('pin_form', clear_on_submit=True):
+        entered = st.text_input('PIN', value='', type='password', placeholder='PIN을 입력하세요')
+        submitted = st.form_submit_button('로그인', use_container_width=True)
+        if submitted:
+            if entered.strip() == ADMIN_PIN:
+                st.session_state['auth_ok'] = True
+                st.session_state['auth_attempts'] = 0
+                st.session_state['auth_lock_until'] = None
+                st.rerun()
+            else:
+                st.session_state['auth_attempts'] += 1
+                if st.session_state['auth_attempts'] >= MAX_ATTEMPTS:
+                    st.session_state['auth_lock_until'] = time.time() + LOCKOUT_SECONDS
+                st.rerun()
     
     # Show error message if last attempt failed
     if st.session_state['auth_attempts'] > 0 and not st.session_state['auth_ok']:
         st.error(f"PIN이 올바르지 않습니다. 남은 시도: {max(0, MAX_ATTEMPTS - st.session_state['auth_attempts'])}")
-
-    # Emergency manual input toggle (temporary helper when keypad fails)
-    if 'manual_pin_visible' not in st.session_state:
-        st.session_state['manual_pin_visible'] = False
-
-    col_m1, col_m2 = st.columns([1,3])
-    with col_m1:
-        if st.button('직접 입력(긴급)', key='pin_manual_toggle'):
-            st.session_state['manual_pin_visible'] = not st.session_state['manual_pin_visible']
-            st.rerun()
-    with col_m2:
-        if st.session_state.get('manual_pin_visible'):
-            manual_val = st.text_input('PIN 직접 입력 (긴급)', value='', type='password', key='manual_pin_input')
-            if st.button('직접 제출', key='pin_manual_submit'):
-                entered = manual_val.strip()
-                if entered == ADMIN_PIN:
-                    st.session_state['auth_ok'] = True
-                    st.session_state['auth_attempts'] = 0
-                    st.session_state['auth_lock_until'] = None
-                    st.rerun()
-                else:
-                    st.session_state['auth_attempts'] += 1
-                    if st.session_state['auth_attempts'] >= MAX_ATTEMPTS:
-                        st.session_state['auth_lock_until'] = time.time() + LOCKOUT_SECONDS
-                    st.rerun()
-
-    # Debug info (temporary): show attempts and lock state for troubleshooting
-    with st.expander('디버그 상태 (임시)', expanded=False):
-        st.write({
-            'pin_entry': st.session_state.get('pin_entry'),
-            'last_pin_pressed': st.session_state.get('last_pin_pressed'),
-            'pin_clicks': st.session_state.get('pin_clicks', 0),
-            'auth_attempts': st.session_state.get('auth_attempts'),
-            'auth_lock_until': st.session_state.get('auth_lock_until'),
-            'is_locked': is_locked(),
-            'ADMIN_PIN_env': ADMIN_PIN
-        })
 
     st.markdown('</div>', unsafe_allow_html=True)
 
@@ -236,17 +201,27 @@ def load_data():
         total_df = pd.read_csv(TOTAL_FILE, encoding='utf-8')
     
     # Load order data
+    # NOTE: 코드 컬럼은 str로 고정(배포 환경에서 dtype 추론으로 코드 포맷이 깨져 미매핑이 발생할 수 있음)
+    order_dtype: dict[str, Any] = {
+        '총판코드': str,
+        '정보공시학교코드': str,
+        '정보공시 학교코드': str,
+        '학교코드': str,
+    }
     try:
-        order_df = pd.read_csv(ORDER_FILE, encoding='cp949')
+        order_df = pd.read_csv(ORDER_FILE, encoding='cp949', low_memory=False, dtype=cast(Any, order_dtype))
     except UnicodeDecodeError:
-        order_df = pd.read_csv(ORDER_FILE, encoding='utf-8')
+        order_df = pd.read_csv(ORDER_FILE, encoding='utf-8', low_memory=False, dtype=cast(Any, order_dtype))
     
     # Load target data
+    target_dtype: dict[str, Any] = {
+        '총판코드': str,
+    }
     try:
-        target_df = pd.read_csv(TARGET_FILE, encoding='cp949')
+        target_df = pd.read_csv(TARGET_FILE, encoding='cp949', low_memory=False, dtype=cast(Any, target_dtype))
     except UnicodeDecodeError:
         try:
-            target_df = pd.read_csv(TARGET_FILE, encoding='utf-8')
+            target_df = pd.read_csv(TARGET_FILE, encoding='utf-8', low_memory=False, dtype=cast(Any, target_dtype))
         except:
             target_df = pd.DataFrame()
     
@@ -260,11 +235,15 @@ def load_data():
             product_df = pd.DataFrame()
     
     # Load distributor data
+    dist_dtype: dict[str, Any] = {
+        '숫자코드': str,
+        '총판코드': str,
+    }
     try:
-        distributor_df = pd.read_csv(DISTRIBUTOR_FILE, encoding='cp949')
+        distributor_df = pd.read_csv(DISTRIBUTOR_FILE, encoding='cp949', low_memory=False, dtype=cast(Any, dist_dtype))
     except UnicodeDecodeError:
         try:
-            distributor_df = pd.read_csv(DISTRIBUTOR_FILE, encoding='utf-8')
+            distributor_df = pd.read_csv(DISTRIBUTOR_FILE, encoding='utf-8', low_memory=False, dtype=cast(Any, dist_dtype))
         except:
             distributor_df = pd.DataFrame()
 
@@ -284,45 +263,73 @@ def load_data():
     if '정보공시학교코드' in order_df.columns:
         order_df['정보공시학교코드'] = order_df['정보공시학교코드'].astype(str)
     
-    # Map distributor official names from total_df to use 총판명(공식)
-    # Create mapping: 숫자코드(4자리) -> 총판명(공식) (이름 기반 매핑 제거)
-    if not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
-        code_columns = [c for c in ['총판코드', '숫자코드'] if c in distributor_df.columns]
-        dist_code_map = {}
-        if code_columns:
-            code_col = code_columns[0]
+    # Map distributor official names using distributor info (prefer outputs mapping if exists)
+    dist_code_map = {}
+    # If a precomputed mapping exists (script output), prefer it. If missing, attempt to auto-generate it.
+    def _ensure_outputs_map():
+        outputs_dir = os.path.join(BASE_DIR, 'outputs')
+        outputs_map_path = os.path.join(outputs_dir, 'distributor_code_mapping.csv')
+        if os.path.exists(outputs_map_path):
+            return outputs_map_path
+        # try to run the mapping script to generate outputs
+        script_path = os.path.join(BASE_DIR, 'scripts', 'generate_distributor_mapping.py')
+        if os.path.exists(script_path):
+            try:
+                subprocess.run([sys.executable, script_path, '--orders', ORDER_FILE, '--distributor', DISTRIBUTOR_FILE, '--out', outputs_dir], check=True, cwd=BASE_DIR)
+            except Exception:
+                # ignore errors; fallback to building from distributor_df
+                pass
+        return outputs_map_path
+
+    outputs_map_path = _ensure_outputs_map()
+    if os.path.exists(outputs_map_path):
+        try:
+            map_df = pd.read_csv(outputs_map_path, dtype=str)
+            # Expect columns: order_code, matched, official_code, official_name
+            if 'order_code' in map_df.columns and 'official_name' in map_df.columns:
+                for _, r in map_df[map_df['matched'].astype(str).str.lower() == 'true'].iterrows():
+                    code = _normalize_code(r['order_code'])
+                    name = str(r.get('official_name', '')).strip()
+                    if code and name:
+                        dist_code_map[code] = name
+        except Exception:
+            dist_code_map = {}
+
+    # If no outputs mapping, build from distributor_df using '숫자코드' preferred
+    if not dist_code_map and not distributor_df.empty and '총판명(공식)' in distributor_df.columns:
+        preferred = '숫자코드' if '숫자코드' in distributor_df.columns else ('총판코드' if '총판코드' in distributor_df.columns else None)
+        if preferred:
             for _, row in distributor_df.iterrows():
                 official_name = row.get('총판명(공식)')
-                code_val = row.get(code_col)
+                code_val = row.get(preferred)
                 if pd.isna(official_name) or pd.isna(code_val):
                     continue
-                # 코드 정규화: 123.0 -> "123" / 문자열은 strip
-                try:
-                    if isinstance(code_val, (int, float)) and not pd.isna(code_val):
-                        code_str = str(int(code_val)) if float(code_val).is_integer() else str(code_val).strip()
-                    else:
-                        code_str = str(code_val).strip()
-                except Exception:
-                    code_str = str(code_val).strip()
-                dist_code_map[code_str] = str(official_name).strip()
+                code_str = _normalize_code(code_val)
+                if code_str:
+                    dist_code_map[code_str] = str(official_name).strip()
 
-        # 주문 데이터 총판명은 '총판코드'로만 매핑 (이름 기반 매핑 제거)
-        if '총판' in order_df.columns and '총판코드' in order_df.columns and dist_code_map:
-            order_df['총판코드_정규화'] = order_df['총판코드'].apply(lambda x: 
-                str(int(x)) if isinstance(x, (int, float)) and not pd.isna(x) and float(x).is_integer() 
-                else str(x).strip() if pd.notna(x) else '')
-            order_df['총판'] = order_df['총판코드_정규화'].map(dist_code_map).fillna(order_df['총판'])
-            # 매핑 딕셔너리 세션 저장 (코드 -> 공식명, 공식명 -> 코드)
-            st.session_state['code_to_official'] = dist_code_map
-            st.session_state['official_to_code'] = {v: k for k, v in dist_code_map.items()}
+    # 주문 데이터 총판은 '총판코드' 컬럼을 정규화하여 매핑 (이름 기반 매핑 제거)
+    if '총판' in order_df.columns and '총판코드' in order_df.columns and dist_code_map:
+        order_df['총판코드_정규화'] = order_df['총판코드'].apply(lambda x: _normalize_code(x))
+        # Map strictly by numeric code -> official name. Do NOT fallback to 주문의 `총판` 명칭.
+        order_df['총판'] = order_df['총판코드_정규화'].map(dist_code_map)
+        # For unmapped codes, show a clear marker using the code (do not use original name)
+        order_df['총판'] = order_df.apply(
+            lambda r: (f"[미매핑:{r['총판코드_정규화']}]") if (pd.isna(r['총판']) or r['총판'] == '') and r['총판코드_정규화'] != '' else ("[코드없음]" if r['총판코드_정규화'] == '' else r['총판']),
+            axis=1
+        )
+        # 매핑 딕셔너리 세션 저장 (코드 -> 공식명, 공식명 -> 코드)
+        st.session_state['code_to_official'] = dist_code_map
+        st.session_state['official_to_code'] = {v: k for k, v in dist_code_map.items()}
     
     # Merge product info to add school level to subject names
     if (not product_df.empty and '코드' in product_df.columns and '학교급' in product_df.columns
             and '도서코드(교지명구분)' in order_df.columns):
         # Create mapping from product code to school level
-        # 코드 컬럼을 정수로 변환 (NaN 제거 후) → 문자열로 변환
+        # 제품 코드를 6자리로 표준화 (제품정보.csv는 5자리 또는 6자리 숫자)
+        # 주문 데이터의 도서코드(교지명구분)는 이미 6자리이므로 문자열로만 변환
         product_df = product_df.dropna(subset=['코드'])
-        product_df['코드'] = product_df['코드'].astype(int).astype(str)
+        product_df['코드'] = product_df['코드'].astype(int).astype(str).str.zfill(6)
         order_df['도서코드(교지명구분)'] = order_df['도서코드(교지명구분)'].astype(str)
 
         # Merge to get school level, subject name and target subject info (목표과목)
