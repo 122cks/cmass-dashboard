@@ -987,9 +987,6 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
                 mgr_total = filtered_total[filtered_total['본사담당자(2025.09)'] == manager]
                 mgr_order = filtered_order_copy[filtered_order_copy['본사담당자(2025.09)'] == manager]
 
-                # 담당자의 전체 담당학생수
-                total_students = mgr_total['학생수(계)'].sum() if '학생수(계)' in mgr_total.columns else 0
-
                 order_school_key = '정보공시 학교코드' if '정보공시 학교코드' in mgr_order.columns else school_code_col
 
                 for subject in mgr_order['과목명_표시'].dropna().unique():
@@ -997,15 +994,27 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
                     subject_orders = subj_data['부수'].sum() if '부수' in subj_data.columns else 0
                     subject_schools = subj_data[order_school_key].nunique() if order_school_key in subj_data.columns else 0
 
-                    # 점유율(%) = (과목별 주문부수 / 담당자 전체 학생수) * 100
-                    subject_share = (subject_orders / total_students * 100) if total_students and total_students > 0 else 0
+                    # 해당 과목의 학교급 추출 (과목명에서 학교급이 없으면 subj_data에서 추출)
+                    subject_level = None
+                    if '학교급' in subj_data.columns and not subj_data.empty:
+                        subject_level = subj_data['학교급'].mode()[0] if len(subj_data['학교급'].mode()) > 0 else None
+                    
+                    # 해당 학교급의 담당 학생수만 계산
+                    if subject_level and '학교급' in mgr_total.columns:
+                        level_students = mgr_total[mgr_total['학교급'] == subject_level]['학생수(계)'].sum() if '학생수(계)' in mgr_total.columns else 0
+                    else:
+                        # 학교급 정보 없으면 전체 학생수 사용 (폴백)
+                        level_students = mgr_total['학생수(계)'].sum() if '학생수(계)' in mgr_total.columns else 0
+                    
+                    # 점유율(%) = (과목별 주문부수 / 해당 학교급 담당 학생수) * 100
+                    subject_share = (subject_orders / level_students * 100) if level_students and level_students > 0 else 0
 
                     subject_analysis.append({
                         '담당자': manager,
                         '과목명': subject,
                         '주문부수': subject_orders,
                         '학교수': subject_schools,
-                        '담당학생수': total_students,
+                        '담당학생수': level_students,
                         '학생수대비점유율(%)': subject_share
                     })
             
