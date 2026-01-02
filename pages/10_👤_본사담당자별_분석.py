@@ -421,7 +421,15 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             st.caption("전체 담당 학교 기준 평균 (미주문 학교 포함)")
     
     with tab3:
-        st.subheader("🗺️ 지역별 인사이트 (담당자별 강점/약점 지역)")
+        st.subheader("🗺️ 지역별 상세 분석")
+        
+        # 담당자 선택 - 단일 선택으로 변경하여 상세 분석
+        st.markdown("---")
+        selected_manager_region = st.selectbox(
+            "📌 담당자 선택 (지역별 상세 분석)",
+            options=['전체 비교'] + selected_managers,
+            key='region_manager_select'
+        )
         
         # 수도권 정의
         metro_regions = ['서울특별시', '인천광역시', '경기도']
@@ -467,97 +475,423 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             
             region_df = pd.DataFrame(region_analysis)
             
-            # 수도권 최고/최저 점유율
-            st.markdown("#### 🏙️ 수도권 지역 점유율 분석")
-            metro_df = region_df[region_df['수도권여부'] == '수도권'].copy()
-            
-            if not metro_df.empty:
-                col1, col2 = st.columns(2)
+            # 전체 비교 vs 개별 담당자 상세 분석
+            if selected_manager_region == '전체 비교':
+                # 전체 담당자 비교 모드
+                st.markdown("### 📊 전체 담당자 지역별 성과 비교")
                 
-                with col1:
-                    st.markdown("##### 🔴 점유율 낮은 지역 TOP 5")
-                    low_metro = metro_df[metro_df['담당학생수'] > 0].nsmallest(5, '학생대비주문율(%)')[['담당자', '지역', '학생대비주문율(%)', '주문부수', '담당학생수', '학교점유율(%)']]
-                    st.dataframe(
-                        low_metro.style.format({
-                            '학생대비주문율(%)': '{:.2f}',
-                            '주문부수': '{:,.0f}',
-                            '담당학생수': '{:,.0f}',
-                            '학교점유율(%)': '{:.1f}'
-                        }).background_gradient(subset=['학생대비주문율(%)'], cmap='Reds_r'),
-                        use_container_width=True
-                    )
-                    st.caption("⚠️ 집중 영업 필요 지역")
+                # 수도권 최고/최저 점유율
+                st.markdown("#### 🏙️ 수도권 지역 점유율 분석")
+                metro_df = region_df[region_df['수도권여부'] == '수도권'].copy()
                 
-                with col2:
-                    st.markdown("##### 🟢 점유율 높은 지역 TOP 5")
-                    high_metro = metro_df[metro_df['담당학생수'] > 0].nlargest(5, '학생대비주문율(%)')[['담당자', '지역', '학생대비주문율(%)', '주문부수', '담당학생수', '학교점유율(%)']]
-                    st.dataframe(
-                        high_metro.style.format({
-                            '학생대비주문율(%)': '{:.2f}',
-                            '주문부수': '{:,.0f}',
-                            '담당학생수': '{:,.0f}',
-                            '학교점유율(%)': '{:.1f}'
-                        }).background_gradient(subset=['학생대비주문율(%)'], cmap='Greens'),
-                        use_container_width=True
-                    )
-                    st.caption("✅ 강점 지역 - 성공 전략 벤치마킹")
-            
-            # 담당자별 지역 히트맵
-            st.markdown("---")
-            st.markdown("#### 📊 담당자 × 지역 점유율 히트맵")
-            
-            pivot_region = region_df.pivot_table(
-                index='담당자',
-                columns='지역',
-                values='학생대비주문율(%)',
-                aggfunc='mean'
-            ).fillna(0)
-            
-            fig_heatmap = px.imshow(
-                pivot_region,
-                labels=dict(x="지역", y="담당자", color="학생대비주문율(%)"),
-                x=pivot_region.columns,
-                y=pivot_region.index,
-                color_continuous_scale='RdYlGn',
-                aspect='auto',
-                title="담당자별 지역 점유율 히트맵 (학생수 대비 주문부수)"
-            )
-            fig_heatmap.update_layout(height=400)
-            st.plotly_chart(fig_heatmap, use_container_width=True)
-            st.caption("💡 진한 녹색: 학생수 대비 주문부수 높음 | 진한 빨강: 낮음")
-
-            # 담당자별 '잘한/못한' 지역(학생수 대비 주문부수 기준)
-            st.markdown("---")
-            st.markdown("#### 🧭 담당자별 강점/약점 지역 (점유율=주문부수÷학생수)")
-            for manager in selected_managers:
-                mgr_region = region_df[(region_df['담당자'] == manager) & (region_df['담당학생수'] > 0)].copy()
-                if mgr_region.empty:
-                    continue
-
-                with st.expander(f"🗺️ {manager} - 잘한/못한 지역 (점유율)", expanded=False):
-                    c1, c2 = st.columns(2)
-                    with c1:
-                        st.markdown("##### 🟢 잘한 지역 TOP 5")
-                        top5 = mgr_region.nlargest(5, '학생대비주문율(%)')[['지역', '학생대비주문율(%)', '주문부수', '담당학생수']]
+                if not metro_df.empty:
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        st.markdown("##### 🔴 점유율 낮은 지역 TOP 5")
+                        low_metro = metro_df[metro_df['담당학생수'] > 0].nsmallest(5, '학생대비주문율(%)')[['담당자', '지역', '학생대비주문율(%)', '주문부수', '담당학생수', '학교점유율(%)']]
                         st.dataframe(
-                            top5.style.format({
+                            low_metro.style.format({
                                 '학생대비주문율(%)': '{:.2f}',
                                 '주문부수': '{:,.0f}',
-                                '담당학생수': '{:,.0f}'
-                            }).background_gradient(subset=['학생대비주문율(%)'], cmap='Greens'),
-                            use_container_width=True
-                        )
-                    with c2:
-                        st.markdown("##### 🔴 못한 지역 TOP 5")
-                        bottom5 = mgr_region.nsmallest(5, '학생대비주문율(%)')[['지역', '학생대비주문율(%)', '주문부수', '담당학생수']]
-                        st.dataframe(
-                            bottom5.style.format({
-                                '학생대비주문율(%)': '{:.2f}',
-                                '주문부수': '{:,.0f}',
-                                '담당학생수': '{:,.0f}'
+                                '담당학생수': '{:,.0f}',
+                                '학교점유율(%)': '{:.1f}'
                             }).background_gradient(subset=['학생대비주문율(%)'], cmap='Reds_r'),
                             use_container_width=True
                         )
+                        st.caption("⚠️ 집중 영업 필요 지역")
+                    
+                    with col2:
+                        st.markdown("##### 🟢 점유율 높은 지역 TOP 5")
+                        high_metro = metro_df[metro_df['담당학생수'] > 0].nlargest(5, '학생대비주문율(%)')[['담당자', '지역', '학생대비주문율(%)', '주문부수', '담당학생수', '학교점유율(%)']]
+                        st.dataframe(
+                            high_metro.style.format({
+                                '학생대비주문율(%)': '{:.2f}',
+                                '주문부수': '{:,.0f}',
+                                '담당학생수': '{:,.0f}',
+                                '학교점유율(%)': '{:.1f}'
+                            }).background_gradient(subset=['학생대비주문율(%)'], cmap='Greens'),
+                            use_container_width=True
+                        )
+                        st.caption("✅ 강점 지역 - 성공 전략 벤치마킹")
+                
+                # 담당자별 지역 히트맵
+                st.markdown("---")
+                st.markdown("#### 📊 담당자 × 지역 점유율 히트맵")
+                
+                pivot_region = region_df.pivot_table(
+                    index='담당자',
+                    columns='지역',
+                    values='학생대비주문율(%)',
+                    aggfunc='mean'
+                ).fillna(0)
+                
+                fig_heatmap = px.imshow(
+                    pivot_region,
+                    labels=dict(x="지역", y="담당자", color="학생대비주문율(%)"),
+                    x=pivot_region.columns,
+                    y=pivot_region.index,
+                    color_continuous_scale='RdYlGn',
+                    aspect='auto',
+                    title="담당자별 지역 점유율 히트맵 (학생수 대비 주문부수)"
+                )
+                fig_heatmap.update_layout(height=400)
+                st.plotly_chart(fig_heatmap, use_container_width=True)
+                st.caption("💡 진한 녹색: 학생수 대비 주문부수 높음 | 진한 빨강: 낮음")
+                
+                # 담당자별 간단한 요약
+                st.markdown("---")
+                st.markdown("#### 🧭 담당자별 지역 성과 요약")
+                for manager in selected_managers:
+                    mgr_region = region_df[(region_df['담당자'] == manager) & (region_df['담당학생수'] > 0)].copy()
+                    if mgr_region.empty:
+                        continue
+
+                    with st.expander(f"🗺️ {manager} - 지역별 요약", expanded=False):
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            st.markdown("##### 🟢 잘한 지역 TOP 5")
+                            top5 = mgr_region.nlargest(5, '학생대비주문율(%)')[['지역', '학생대비주문율(%)', '주문부수', '담당학생수']]
+                            st.dataframe(
+                                top5.style.format({
+                                    '학생대비주문율(%)': '{:.2f}',
+                                    '주문부수': '{:,.0f}',
+                                    '담당학생수': '{:,.0f}'
+                                }).background_gradient(subset=['학생대비주문율(%)'], cmap='Greens'),
+                                use_container_width=True
+                            )
+                        with c2:
+                            st.markdown("##### 🔴 못한 지역 TOP 5")
+                            bottom5 = mgr_region.nsmallest(5, '학생대비주문율(%)')[['지역', '학생대비주문율(%)', '주문부수', '담당학생수']]
+                            st.dataframe(
+                                bottom5.style.format({
+                                    '학생대비주문율(%)': '{:.2f}',
+                                    '주문부수': '{:,.0f}',
+                                    '담당학생수': '{:,.0f}'
+                                }).background_gradient(subset=['학생대비주문율(%)'], cmap='Reds_r'),
+                                use_container_width=True
+                            )
+            
+            else:
+                # 개별 담당자 상세 분석 모드
+                st.markdown(f"### 🎯 {selected_manager_region} - 지역별 상세 분석")
+                
+                mgr_region_data = region_df[(region_df['담당자'] == selected_manager_region) & (region_df['담당학생수'] > 0)].copy()
+                
+                if mgr_region_data.empty:
+                    st.warning(f"{selected_manager_region}의 지역별 데이터가 없습니다.")
+                else:
+                    # 주요 지표 요약
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        total_regions = len(mgr_region_data)
+                        st.metric("📍 담당 지역 수", f"{total_regions}개")
+                    with col2:
+                        avg_share = mgr_region_data['학생대비주문율(%)'].mean()
+                        st.metric("📊 평균 점유율", f"{avg_share:.2f}%")
+                    with col3:
+                        best_region = mgr_region_data.nlargest(1, '학생대비주문율(%)')
+                        if not best_region.empty:
+                            st.metric("🏆 최고 지역", best_region.iloc[0]['지역'], 
+                                     delta=f"{best_region.iloc[0]['학생대비주문율(%)']:.2f}%")
+                    with col4:
+                        worst_region = mgr_region_data.nsmallest(1, '학생대비주문율(%)')
+                        if not worst_region.empty:
+                            st.metric("⚠️ 최저 지역", worst_region.iloc[0]['지역'], 
+                                     delta=f"{worst_region.iloc[0]['학생대비주문율(%)']:.2f}%",
+                                     delta_color="inverse")
+                    
+                    st.markdown("---")
+                    
+                    # 시각화 섹션
+                    viz_tab1, viz_tab2, viz_tab3, viz_tab4 = st.tabs(["📊 종합 대시보드", "🗺️ 지역 분포", "📈 성과 분석", "💡 인사이트"])
+                    
+                    with viz_tab1:
+                        st.markdown("#### 📊 지역별 성과 종합 대시보드")
+                        
+                        # 버블 차트: 담당학생수 vs 점유율 (주문부수 크기)
+                        fig_bubble = px.scatter(
+                            mgr_region_data,
+                            x='담당학생수',
+                            y='학생대비주문율(%)',
+                            size='주문부수',
+                            color='수도권여부',
+                            hover_name='지역',
+                            hover_data={'담당학생수': ':,.0f', '학생대비주문율(%)': ':.2f', '주문부수': ':,.0f'},
+                            title=f"{selected_manager_region} - 지역별 학생수 vs 점유율 (버블=주문부수)",
+                            labels={'담당학생수': '담당 학생수 (명)', '학생대비주문율(%)': '점유율 (%)'},
+                            color_discrete_map={'수도권': '#FF6B6B', '지방': '#4ECDC4'}
+                        )
+                        fig_bubble.update_layout(height=500)
+                        st.plotly_chart(fig_bubble, use_container_width=True)
+                        st.caption("💡 버블 크기 = 주문부수 | 오른쪽 위: 고효율 지역 | 왼쪽 위: 소규모 고점유율")
+                        
+                        # 트리맵: 지역별 주문부수 비중
+                        st.markdown("---")
+                        fig_tree = px.treemap(
+                            mgr_region_data,
+                            path=['수도권여부', '지역'],
+                            values='주문부수',
+                            color='학생대비주문율(%)',
+                            color_continuous_scale='RdYlGn',
+                            title=f"{selected_manager_region} - 지역별 주문부수 비중 (색상=점유율)",
+                            hover_data={'주문부수': ':,.0f', '학생대비주문율(%)': ':.2f'}
+                        )
+                        fig_tree.update_layout(height=500)
+                        st.plotly_chart(fig_tree, use_container_width=True)
+                        st.caption("💡 면적 = 주문부수 비중 | 녹색: 고점유율 | 빨강: 저점유율")
+                    
+                    with viz_tab2:
+                        st.markdown("#### 🗺️ 지역별 분포 및 순위")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            # 지역별 점유율 바 차트
+                            fig_bar = px.bar(
+                                mgr_region_data.sort_values('학생대비주문율(%)', ascending=True),
+                                y='지역',
+                                x='학생대비주문율(%)',
+                                orientation='h',
+                                title="지역별 점유율 순위",
+                                color='학생대비주문율(%)',
+                                color_continuous_scale='RdYlGn',
+                                text='학생대비주문율(%)'
+                            )
+                            fig_bar.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+                            fig_bar.update_layout(height=600, showlegend=False)
+                            st.plotly_chart(fig_bar, use_container_width=True)
+                        
+                        with col2:
+                            # 지역별 주문부수 바 차트
+                            fig_orders = px.bar(
+                                mgr_region_data.sort_values('주문부수', ascending=True),
+                                y='지역',
+                                x='주문부수',
+                                orientation='h',
+                                title="지역별 주문부수 순위",
+                                color='주문부수',
+                                color_continuous_scale='Blues',
+                                text='주문부수'
+                            )
+                            fig_orders.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+                            fig_orders.update_layout(height=600, showlegend=False)
+                            st.plotly_chart(fig_orders, use_container_width=True)
+                        
+                        # 상세 테이블
+                        st.markdown("---")
+                        st.markdown("##### 📋 지역별 상세 데이터")
+                        display_region = mgr_region_data.sort_values('학생대비주문율(%)', ascending=False)
+                        st.dataframe(
+                            display_region.style.format({
+                                '담당학생수': '{:,.0f}',
+                                '주문부수': '{:,.0f}',
+                                '채택학교수': '{:,.0f}',
+                                '담당학교수': '{:,.0f}',
+                                '학교점유율(%)': '{:.1f}',
+                                '학생대비주문율(%)': '{:.2f}'
+                            }).background_gradient(subset=['학생대비주문율(%)'], cmap='RdYlGn'),
+                            use_container_width=True,
+                            height=300
+                        )
+                    
+                    with viz_tab3:
+                        st.markdown("#### 📈 성과 분석")
+                        
+                        # 수도권 vs 지방 비교
+                        st.markdown("##### 🏙️ 수도권 vs 지방 비교")
+                        metro_comparison = mgr_region_data.groupby('수도권여부').agg({
+                            '주문부수': 'sum',
+                            '담당학생수': 'sum',
+                            '채택학교수': 'sum',
+                            '담당학교수': 'sum'
+                        }).reset_index()
+                        metro_comparison['학생대비주문율(%)'] = (metro_comparison['주문부수'] / metro_comparison['담당학생수'] * 100).round(2)
+                        metro_comparison['학교점유율(%)'] = (metro_comparison['채택학교수'] / metro_comparison['담당학교수'] * 100).round(1)
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            fig_metro_pie = px.pie(
+                                metro_comparison,
+                                values='주문부수',
+                                names='수도권여부',
+                                title="주문부수 비중 (수도권 vs 지방)",
+                                hole=0.4,
+                                color_discrete_sequence=['#FF6B6B', '#4ECDC4']
+                            )
+                            st.plotly_chart(fig_metro_pie, use_container_width=True)
+                        
+                        with col2:
+                            fig_metro_bar = px.bar(
+                                metro_comparison,
+                                x='수도권여부',
+                                y='학생대비주문율(%)',
+                                title="점유율 비교 (수도권 vs 지방)",
+                                color='수도권여부',
+                                text='학생대비주문율(%)',
+                                color_discrete_sequence=['#FF6B6B', '#4ECDC4']
+                            )
+                            fig_metro_bar.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+                            st.plotly_chart(fig_metro_bar, use_container_width=True)
+                        
+                        st.dataframe(
+                            metro_comparison.style.format({
+                                '주문부수': '{:,.0f}',
+                                '담당학생수': '{:,.0f}',
+                                '채택학교수': '{:,.0f}',
+                                '담당학교수': '{:,.0f}',
+                                '학생대비주문율(%)': '{:.2f}',
+                                '학교점유율(%)': '{:.1f}'
+                            }),
+                            use_container_width=True
+                        )
+                        
+                        # TOP/BOTTOM 5 비교
+                        st.markdown("---")
+                        st.markdown("##### 🎯 최고 vs 최저 성과 지역")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("###### 🏆 TOP 5 지역")
+                            top5 = mgr_region_data.nlargest(5, '학생대비주문율(%)')
+                            fig_top5 = px.bar(
+                                top5,
+                                x='학생대비주문율(%)',
+                                y='지역',
+                                orientation='h',
+                                color='학생대비주문율(%)',
+                                color_continuous_scale='Greens',
+                                text='학생대비주문율(%)'
+                            )
+                            fig_top5.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+                            fig_top5.update_layout(showlegend=False, height=300)
+                            st.plotly_chart(fig_top5, use_container_width=True)
+                        
+                        with col2:
+                            st.markdown("###### ⚠️ BOTTOM 5 지역")
+                            bottom5 = mgr_region_data.nsmallest(5, '학생대비주문율(%)')
+                            fig_bottom5 = px.bar(
+                                bottom5,
+                                x='학생대비주문율(%)',
+                                y='지역',
+                                orientation='h',
+                                color='학생대비주문율(%)',
+                                color_continuous_scale='Reds',
+                                text='학생대비주문율(%)'
+                            )
+                            fig_bottom5.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+                            fig_bottom5.update_layout(showlegend=False, height=300)
+                            st.plotly_chart(fig_bottom5, use_container_width=True)
+                    
+                    with viz_tab4:
+                        st.markdown("#### 💡 자동 생성 인사이트")
+                        
+                        # 인사이트 자동 생성
+                        avg_share_val = mgr_region_data['학생대비주문율(%)'].mean()
+                        best_region_data = mgr_region_data.nlargest(1, '학생대비주문율(%)').iloc[0]
+                        worst_region_data = mgr_region_data.nsmallest(1, '학생대비주문율(%)').iloc[0]
+                        
+                        metro_data = mgr_region_data[mgr_region_data['수도권여부'] == '수도권']
+                        local_data = mgr_region_data[mgr_region_data['수도권여부'] == '지방']
+                        
+                        metro_avg = metro_data['학생대비주문율(%)'].mean() if not metro_data.empty else 0
+                        local_avg = local_data['학생대비주문율(%)'].mean() if not local_data.empty else 0
+                        
+                        # 인사이트 카드
+                        st.success(f"""
+                        **📊 전체 성과 요약**
+                        - 평균 점유율: **{avg_share_val:.2f}%**
+                        - 담당 지역 수: **{len(mgr_region_data)}개**
+                        - 총 주문부수: **{mgr_region_data['주문부수'].sum():,.0f}부**
+                        - 총 담당학생수: **{mgr_region_data['담당학생수'].sum():,.0f}명**
+                        """)
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.info(f"""
+                            **🏆 최고 성과 지역**
+                            - **{best_region_data['지역']}**
+                            - 점유율: **{best_region_data['학생대비주문율(%)']:.2f}%**
+                            - 주문부수: **{best_region_data['주문부수']:,.0f}부**
+                            - 담당학생수: **{best_region_data['담당학생수']:,.0f}명**
+                            
+                            💡 성공 요인을 분석하여 다른 지역에 적용하세요!
+                            """)
+                        
+                        with col2:
+                            st.warning(f"""
+                            **⚠️ 개선 필요 지역**
+                            - **{worst_region_data['지역']}**
+                            - 점유율: **{worst_region_data['학생대비주문율(%)']:.2f}%**
+                            - 주문부수: **{worst_region_data['주문부수']:,.0f}부**
+                            - 담당학생수: **{worst_region_data['담당학생수']:,.0f}명**
+                            
+                            🎯 집중 영업 전략이 필요합니다!
+                            """)
+                        
+                        if not metro_data.empty and not local_data.empty:
+                            st.markdown("---")
+                            if metro_avg > local_avg:
+                                st.success(f"""
+                                **🏙️ 수도권 우위**
+                                - 수도권 평균 점유율: **{metro_avg:.2f}%**
+                                - 지방 평균 점유율: **{local_avg:.2f}%**
+                                - 격차: **{(metro_avg - local_avg):.2f}%p**
+                                
+                                ✅ 수도권에서 강세를 보이고 있습니다. 지방 지역 개선 전략을 고려하세요.
+                                """)
+                            else:
+                                st.info(f"""
+                                **🌄 지방 우위**
+                                - 지방 평균 점유율: **{local_avg:.2f}%**
+                                - 수도권 평균 점유율: **{metro_avg:.2f}%**
+                                - 격차: **{(local_avg - metro_avg):.2f}%p**
+                                
+                                ✅ 지방에서 강세를 보이고 있습니다. 수도권 확대 전략을 고려하세요.
+                                """)
+                        
+                        # 액션 아이템
+                        st.markdown("---")
+                        st.markdown("##### 🎯 추천 액션 아이템")
+                        
+                        # 점유율 하위 30% 지역
+                        threshold_low = mgr_region_data['학생대비주문율(%)'].quantile(0.3)
+                        low_regions = mgr_region_data[mgr_region_data['학생대비주문율(%)'] <= threshold_low]
+                        
+                        if not low_regions.empty:
+                            st.error(f"""
+                            **🔴 즉시 조치 필요 지역 ({len(low_regions)}개)**
+                            
+                            {', '.join(low_regions['지역'].tolist())}
+                            
+                            **추천 액션:**
+                            1. 해당 지역 학교 방문 일정 수립
+                            2. 미채택 학교 리스트 확보 및 1:1 접촉
+                            3. 최고 성과 지역의 성공 사례 공유
+                            4. 지역별 맞춤 프로모션 기획
+                            """)
+                        
+                        # 고성과 지역 (상위 30%)
+                        threshold_high = mgr_region_data['학생대비주문율(%)'].quantile(0.7)
+                        high_regions = mgr_region_data[mgr_region_data['학생대비주문율(%)'] >= threshold_high]
+                        
+                        if not high_regions.empty:
+                            st.success(f"""
+                            **🟢 성과 우수 지역 ({len(high_regions)}개)**
+                            
+                            {', '.join(high_regions['지역'].tolist())}
+                            
+                            **추천 액션:**
+                            1. 성공 요인 분석 및 문서화
+                            2. 우수 사례 전사 공유
+                            3. 추가 상품 크로스셀링 기회 발굴
+                            4. 고객 만족도 조사 및 리뷰 수집
+                            """)
+            
+            region_df = pd.DataFrame(region_analysis)
         
         # 담당자별 시도 분포 (기존 코드)
         st.markdown("---")
@@ -613,7 +947,15 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
                     )
     
     with tab4:
-        st.subheader("📚 과목별 인사이트 (담당자별 강점/약점 과목)")
+        st.subheader("📚 과목별 상세 분석")
+        
+        # 담당자 선택
+        st.markdown("---")
+        selected_manager_subject = st.selectbox(
+            "📌 담당자 선택 (과목별 상세 분석)",
+            options=['전체 비교'] + selected_managers,
+            key='subject_manager_select'
+        )
         
         if '과목명' in filtered_order.columns:
             # 학교급 정보를 과목명에 추가
@@ -667,45 +1009,417 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             base = subject_df['평균점유율(%)'].replace(0, np.nan)
             subject_df['평균대비(%)'] = ((subject_df['학생수대비점유율(%)'] - subject_df['평균점유율(%)']) / base * 100).round(1).fillna(0)
             
-            # 주요 과목 (전체 주문 기준 TOP 10)
-            top_subjects = subject_df.groupby('과목명')['주문부수'].sum().nlargest(10).index
-            top_subject_df = subject_df[subject_df['과목명'].isin(top_subjects)]
-            
-            st.markdown("#### 📖 주요 과목별 담당자 점유율 비교")
-            
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                st.markdown("##### 🔴 과목별 점유율 낮은 케이스 TOP 10")
-                low_subject = top_subject_df[top_subject_df['담당학생수'] > 0].nsmallest(10, '학생수대비점유율(%)')[['담당자', '과목명', '학생수대비점유율(%)', '주문부수', '담당학생수', '평균대비(%)']]
-                st.dataframe(
-                    low_subject.style.format({
-                        '학생수대비점유율(%)': '{:.2f}',
-                        '주문부수': '{:,.0f}',
-                        '담당학생수': '{:,.0f}',
-                        '평균대비(%)': '{:+.1f}',
-                        '학교수': '{:,.0f}'
-                    }).background_gradient(subset=['평균대비(%)'], cmap='Reds_r'),
-                    use_container_width=True
+            # 전체 비교 vs 개별 담당자 상세 분석
+            if selected_manager_subject == '전체 비교':
+                # 전체 담당자 비교 모드
+                st.markdown("### 📊 전체 담당자 과목별 성과 비교")
+                
+                # 주요 과목 (전체 주문 기준 TOP 10)
+                top_subjects = subject_df.groupby('과목명')['주문부수'].sum().nlargest(10).index
+                top_subject_df = subject_df[subject_df['과목명'].isin(top_subjects)]
+                
+                st.markdown("#### 📖 주요 과목별 담당자 점유율 비교")
+                
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.markdown("##### 🔴 과목별 점유율 낮은 케이스 TOP 10")
+                    low_subject = top_subject_df[top_subject_df['담당학생수'] > 0].nsmallest(10, '학생수대비점유율(%)')[['담당자', '과목명', '학생수대비점유율(%)', '주문부수', '담당학생수', '평균대비(%)']]
+                    st.dataframe(
+                        low_subject.style.format({
+                            '학생수대비점유율(%)': '{:.2f}',
+                            '주문부수': '{:,.0f}',
+                            '담당학생수': '{:,.0f}',
+                            '평균대비(%)': '{:+.1f}'
+                        }).background_gradient(subset=['평균대비(%)'], cmap='Reds_r'),
+                        use_container_width=True
+                    )
+                    st.caption("⚠️ 해당 과목 집중 영업 필요")
+                
+                with col2:
+                    st.markdown("##### 🟢 과목별 점유율 높은 케이스 TOP 10")
+                    high_subject = top_subject_df[top_subject_df['담당학생수'] > 0].nlargest(10, '학생수대비점유율(%)')[['담당자', '과목명', '학생수대비점유율(%)', '주문부수', '담당학생수', '평균대비(%)']]
+                    st.dataframe(
+                        high_subject.style.format({
+                            '학생수대비점유율(%)': '{:.2f}',
+                            '주문부수': '{:,.0f}',
+                            '담당학생수': '{:,.0f}',
+                            '평균대비(%)': '{:+.1f}'
+                        }).background_gradient(subset=['평균대비(%)'], cmap='Greens'),
+                        use_container_width=True
+                    )
+                    st.caption("✅ 강점 과목 - 노하우 공유 필요")
+                
+                # 담당자별 과목 점유율 히트맵
+                st.markdown("---")
+                st.markdown("#### 📊 담당자 × 과목 점유율 히트맵 (TOP 15 과목, 담당학생수 대비 주문부수)")
+                
+                top15_subjects = subject_df.groupby('과목명')['주문부수'].sum().nlargest(15).index
+                top15_df = subject_df[subject_df['과목명'].isin(top15_subjects)]
+                
+                pivot_subject = top15_df.pivot_table(
+                    index='담당자',
+                    columns='과목명',
+                    values='학생수대비점유율(%)',
+                    aggfunc='sum'
+                ).fillna(0)
+                
+                fig_subject_heatmap = px.imshow(
+                    pivot_subject,
+                    labels=dict(x="과목명", y="담당자", color="점유율(%)"),
+                    x=pivot_subject.columns,
+                    y=pivot_subject.index,
+                    color_continuous_scale='YlOrRd',
+                    aspect='auto',
+                    title="담당자별 과목 점유율(담당학생수 대비 주문부수) 히트맵"
                 )
-                st.caption("⚠️ 해당 과목 집중 영업 필요")
+                fig_subject_heatmap.update_layout(height=400, xaxis_tickangle=-45)
+                st.plotly_chart(fig_subject_heatmap, use_container_width=True)
+                st.caption("💡 진한 색: 점유율 높음 (담당학생수 대비 주문부수) | 옅은 색: 낮음")
+                
+                # 담당자별 간단한 요약
+                st.markdown("---")
+                st.markdown("#### 🧠 담당자별 과목 성과 요약")
+                for manager in selected_managers:
+                    mgr_subject = subject_df[(subject_df['담당자'] == manager) & (subject_df['담당학생수'] > 0)].copy()
+                    if mgr_subject.empty:
+                        continue
+                    with st.expander(f"📚 {manager} - 과목별 요약", expanded=False):
+                        c1, c2 = st.columns(2)
+                        with c1:
+                            st.markdown("##### 🟢 잘한 과목 TOP 5")
+                            top5 = mgr_subject.nlargest(5, '학생수대비점유율(%)')[['과목명', '학생수대비점유율(%)', '주문부수', '학교수']]
+                            st.dataframe(
+                                top5.style.format({
+                                    '학생수대비점유율(%)': '{:.2f}',
+                                    '주문부수': '{:,.0f}',
+                                    '학교수': '{:,.0f}'
+                                }).background_gradient(subset=['학생수대비점유율(%)'], cmap='Greens'),
+                                use_container_width=True
+                            )
+                        with c2:
+                            st.markdown("##### 🔴 못한 과목 TOP 5")
+                            bottom5 = mgr_subject.nsmallest(5, '학생수대비점유율(%)')[['과목명', '학생수대비점유율(%)', '주문부수', '학교수']]
+                            st.dataframe(
+                                bottom5.style.format({
+                                    '학생수대비점유율(%)': '{:.2f}',
+                                    '주문부수': '{:,.0f}',
+                                    '학교수': '{:,.0f}'
+                                }).background_gradient(subset=['학생수대비점유율(%)'], cmap='Reds_r'),
+                                use_container_width=True
+                            )
             
-            with col2:
-                st.markdown("##### 🟢 과목별 점유율 높은 케이스 TOP 10")
-                high_subject = top_subject_df[top_subject_df['담당학생수'] > 0].nlargest(10, '학생수대비점유율(%)')[['담당자', '과목명', '학생수대비점유율(%)', '주문부수', '담당학생수', '평균대비(%)']]
-                st.dataframe(
-                    high_subject.style.format({
-                        '학생수대비점유율(%)': '{:.2f}',
-                        '주문부수': '{:,.0f}',
-                        '담당학생수': '{:,.0f}',
-                        '평균대비(%)': '{:+.1f}',
-                        '학교수': '{:,.0f}'
-                    }).background_gradient(subset=['평균대비(%)'], cmap='Greens'),
-                    use_container_width=True
-                )
-                st.caption("✅ 강점 과목 - 노하우 공유 필요")
+            else:
+                # 개별 담당자 상세 분석 모드
+                st.markdown(f"### 🎯 {selected_manager_subject} - 과목별 상세 분석")
+                
+                mgr_subject_data = subject_df[(subject_df['담당자'] == selected_manager_subject) & (subject_df['담당학생수'] > 0)].copy()
+                
+                if mgr_subject_data.empty:
+                    st.warning(f"{selected_manager_subject}의 과목별 데이터가 없습니다.")
+                else:
+                    # 주요 지표 요약
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        total_subjects_count = len(mgr_subject_data)
+                        st.metric("📚 과목 수", f"{total_subjects_count}개")
+                    with col2:
+                        avg_share_subj = mgr_subject_data['학생수대비점유율(%)'].mean()
+                        st.metric("📊 평균 점유율", f"{avg_share_subj:.2f}%")
+                    with col3:
+                        best_subject = mgr_subject_data.nlargest(1, '학생수대비점유율(%)')
+                        if not best_subject.empty:
+                            st.metric("🏆 최고 과목", best_subject.iloc[0]['과목명'][:15] + '...' if len(best_subject.iloc[0]['과목명']) > 15 else best_subject.iloc[0]['과목명'], 
+                                     delta=f"{best_subject.iloc[0]['학생수대비점유율(%)']:.2f}%")
+                    with col4:
+                        worst_subject = mgr_subject_data.nsmallest(1, '학생수대비점유율(%)')
+                        if not worst_subject.empty:
+                            st.metric("⚠️ 최저 과목", worst_subject.iloc[0]['과목명'][:15] + '...' if len(worst_subject.iloc[0]['과목명']) > 15 else worst_subject.iloc[0]['과목명'], 
+                                     delta=f"{worst_subject.iloc[0]['학생수대비점유율(%)']:.2f}%",
+                                     delta_color="inverse")
+                    
+                    st.markdown("---")
+                    
+                    # 시각화 섹션
+                    viz_tab1, viz_tab2, viz_tab3, viz_tab4 = st.tabs(["📊 종합 대시보드", "📚 과목 분포", "📈 성과 분석", "💡 인사이트"])
+                    
+                    with viz_tab1:
+                        st.markdown("#### 📊 과목별 성과 종합 대시보드")
+                        
+                        # 버블 차트: 주문부수 vs 점유율 (학교수 크기)
+                        fig_bubble_subj = px.scatter(
+                            mgr_subject_data,
+                            x='주문부수',
+                            y='학생수대비점유율(%)',
+                            size='학교수',
+                            color='평균대비(%)',
+                            hover_name='과목명',
+                            hover_data={'주문부수': ':,.0f', '학생수대비점유율(%)': ':.2f', '학교수': ':,.0f', '평균대비(%)': ':+.1f'},
+                            title=f"{selected_manager_subject} - 과목별 주문부수 vs 점유율 (버블=학교수)",
+                            labels={'주문부수': '주문부수 (부)', '학생수대비점유율(%)': '점유율 (%)'},
+                            color_continuous_scale='RdYlGn'
+                        )
+                        fig_bubble_subj.update_layout(height=500)
+                        st.plotly_chart(fig_bubble_subj, use_container_width=True)
+                        st.caption("💡 버블 크기 = 학교수 | 색상 = 평균대비 성과 | 오른쪽 위: 고효율 과목")
+                        
+                        # 트리맵: 과목별 주문부수 비중
+                        st.markdown("---")
+                        # TOP 20 과목만 표시
+                        top20_mgr = mgr_subject_data.nlargest(20, '주문부수')
+                        fig_tree_subj = px.treemap(
+                            top20_mgr,
+                            path=['과목명'],
+                            values='주문부수',
+                            color='학생수대비점유율(%)',
+                            color_continuous_scale='RdYlGn',
+                            title=f"{selected_manager_subject} - 과목별 주문부수 비중 TOP 20 (색상=점유율)",
+                            hover_data={'주문부수': ':,.0f', '학생수대비점유율(%)': ':.2f'}
+                        )
+                        fig_tree_subj.update_layout(height=500)
+                        st.plotly_chart(fig_tree_subj, use_container_width=True)
+                        st.caption("💡 면적 = 주문부수 비중 | 녹색: 고점유율 | 빨강: 저점유율")
+                    
+                    with viz_tab2:
+                        st.markdown("#### 📚 과목별 분포 및 순위")
+                        
+                        # TOP 15과목만 표시
+                        top15_display = mgr_subject_data.nlargest(15, '주문부수')
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            # 과목별 점유율 바 차트
+                            fig_bar_subj = px.bar(
+                                top15_display.sort_values('학생수대비점유율(%)', ascending=True),
+                                y='과목명',
+                                x='학생수대비점유율(%)',
+                                orientation='h',
+                                title="과목별 점유율 TOP 15",
+                                color='학생수대비점유율(%)',
+                                color_continuous_scale='RdYlGn',
+                                text='학생수대비점유율(%)'
+                            )
+                            fig_bar_subj.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+                            fig_bar_subj.update_layout(height=600, showlegend=False)
+                            st.plotly_chart(fig_bar_subj, use_container_width=True)
+                        
+                        with col2:
+                            # 과목별 주문부수 바 차트
+                            fig_orders_subj = px.bar(
+                                top15_display.sort_values('주문부수', ascending=True),
+                                y='과목명',
+                                x='주문부수',
+                                orientation='h',
+                                title="과목별 주문부수 TOP 15",
+                                color='주문부수',
+                                color_continuous_scale='Blues',
+                                text='주문부수'
+                            )
+                            fig_orders_subj.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
+                            fig_orders_subj.update_layout(height=600, showlegend=False)
+                            st.plotly_chart(fig_orders_subj, use_container_width=True)
+                        
+                        # 상세 테이블
+                        st.markdown("---")
+                        st.markdown("##### 📋 과목별 상세 데이터")
+                        display_subject = mgr_subject_data.sort_values('학생수대비점유율(%)', ascending=False)
+                        st.dataframe(
+                            display_subject.style.format({
+                                '주문부수': '{:,.0f}',
+                                '학교수': '{:,.0f}',
+                                '담당학생수': '{:,.0f}',
+                                '학생수대비점유율(%)': '{:.2f}',
+                                '평균점유율(%)': '{:.2f}',
+                                '평균대비(%)': '{:+.1f}'
+                            }).background_gradient(subset=['학생수대비점유율(%)'], cmap='RdYlGn'),
+                            use_container_width=True,
+                            height=300
+                        )
+                    
+                    with viz_tab3:
+                        st.markdown("#### 📈 성과 분석")
+                        
+                        # TOP/BOTTOM 10 비교
+                        st.markdown("##### 🎯 최고 vs 최저 성과 과목")
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.markdown("###### 🏆 TOP 10 과목")
+                            top10_subj = mgr_subject_data.nlargest(10, '학생수대비점유율(%)')
+                            fig_top10_subj = px.bar(
+                                top10_subj,
+                                x='학생수대비점유율(%)',
+                                y='과목명',
+                                orientation='h',
+                                color='학생수대비점유율(%)',
+                                color_continuous_scale='Greens',
+                                text='학생수대비점유율(%)'
+                            )
+                            fig_top10_subj.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+                            fig_top10_subj.update_layout(showlegend=False, height=400)
+                            st.plotly_chart(fig_top10_subj, use_container_width=True)
+                            
+                            st.dataframe(
+                                top10_subj[['과목명', '주문부수', '학교수', '학생수대비점유율(%)']].style.format({
+                                    '주문부수': '{:,.0f}',
+                                    '학교수': '{:,.0f}',
+                                    '학생수대비점유율(%)': '{:.2f}'
+                                }),
+                                use_container_width=True
+                            )
+                        
+                        with col2:
+                            st.markdown("###### ⚠️ BOTTOM 10 과목")
+                            bottom10_subj = mgr_subject_data.nsmallest(10, '학생수대비점유율(%)')
+                            fig_bottom10_subj = px.bar(
+                                bottom10_subj,
+                                x='학생수대비점유율(%)',
+                                y='과목명',
+                                orientation='h',
+                                color='학생수대비점유율(%)',
+                                color_continuous_scale='Reds',
+                                text='학생수대비점유율(%)'
+                            )
+                            fig_bottom10_subj.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+                            fig_bottom10_subj.update_layout(showlegend=False, height=400)
+                            st.plotly_chart(fig_bottom10_subj, use_container_width=True)
+                            
+                            st.dataframe(
+                                bottom10_subj[['과목명', '주문부수', '학교수', '학생수대비점유율(%)']].style.format({
+                                    '주문부수': '{:,.0f}',
+                                    '학교수': '{:,.0f}',
+                                    '학생수대비점유율(%)': '{:.2f}'
+                                }),
+                                use_container_width=True
+                            )
+                        
+                        # 평균 대비 성과 분포
+                        st.markdown("---")
+                        st.markdown("##### 📊 평균 대비 성과 분포")
+                        
+                        fig_dist = px.histogram(
+                            mgr_subject_data,
+                            x='평균대비(%)',
+                            nbins=20,
+                            title=f"{selected_manager_subject} - 평균 대비 성과 분포",
+                            labels={'평균대비(%)': '평균 대비 (%)', 'count': '과목 수'},
+                            color_discrete_sequence=['#4ECDC4']
+                        )
+                        fig_dist.add_vline(x=0, line_dash="dash", line_color="red", annotation_text="평균")
+                        st.plotly_chart(fig_dist, use_container_width=True)
+                        st.caption("💡 0보다 오른쪽: 평균 이상 | 0보다 왼쪽: 평균 이하")
+                    
+                    with viz_tab4:
+                        st.markdown("#### 💡 자동 생성 인사이트")
+                        
+                        # 인사이트 자동 생성
+                        avg_share_subj_val = mgr_subject_data['학생수대비점유율(%)'].mean()
+                        best_subject_data = mgr_subject_data.nlargest(1, '학생수대비점유율(%)').iloc[0]
+                        worst_subject_data = mgr_subject_data.nsmallest(1, '학생수대비점유율(%)').iloc[0]
+                        
+                        total_orders_subj = mgr_subject_data['주문부수'].sum()
+                        total_schools_subj = mgr_subject_data['학교수'].sum()
+                        
+                        # 인사이트 카드
+                        st.success(f"""
+                        **📊 전체 성과 요약**
+                        - 평균 점유율: **{avg_share_subj_val:.2f}%**
+                        - 취급 과목 수: **{len(mgr_subject_data)}개**
+                        - 총 주문부수: **{total_orders_subj:,.0f}부**
+                        - 총 채택학교: **{int(total_schools_subj):,}개**
+                        """)
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.info(f"""
+                            **🏆 최고 성과 과목**
+                            - **{best_subject_data['과목명']}**
+                            - 점유율: **{best_subject_data['학생수대비점유율(%)']:.2f}%**
+                            - 주문부수: **{best_subject_data['주문부수']:,.0f}부**
+                            - 채택학교수: **{int(best_subject_data['학교수'])}개**
+                            - 평균대비: **{best_subject_data['평균대비(%)']:+.1f}%**
+                            
+                            💡 성공 요인을 분석하여 다른 과목에 적용하세요!
+                            """)
+                        
+                        with col2:
+                            st.warning(f"""
+                            **⚠️ 개선 필요 과목**
+                            - **{worst_subject_data['과목명']}**
+                            - 점유율: **{worst_subject_data['학생수대비점유율(%)']:.2f}%**
+                            - 주문부수: **{worst_subject_data['주문부수']:,.0f}부**
+                            - 채택학교수: **{int(worst_subject_data['학교수'])}개**
+                            - 평균대비: **{worst_subject_data['평균대비(%)']:+.1f}%**
+                            
+                            🎯 집중 영업 전략이 필요합니다!
+                            """)
+                        
+                        # 성과 구간 분석
+                        st.markdown("---")
+                        st.markdown("##### 📊 성과 구간별 분석")
+                        
+                        above_avg = mgr_subject_data[mgr_subject_data['평균대비(%)'] > 0]
+                        below_avg = mgr_subject_data[mgr_subject_data['평균대비(%)'] <= 0]
+                        
+                        col1, col2 = st.columns(2)
+                        
+                        with col1:
+                            st.metric("🟢 평균 이상 과목", f"{len(above_avg)}개", 
+                                     delta=f"{len(above_avg)/len(mgr_subject_data)*100:.1f}%")
+                            if not above_avg.empty:
+                                st.caption(f"평균 점유율: {above_avg['학생수대비점유율(%)'].mean():.2f}%")
+                        
+                        with col2:
+                            st.metric("🔴 평균 이하 과목", f"{len(below_avg)}개", 
+                                     delta=f"{len(below_avg)/len(mgr_subject_data)*100:.1f}%",
+                                     delta_color="inverse")
+                            if not below_avg.empty:
+                                st.caption(f"평균 점유율: {below_avg['학생수대비점유율(%)'].mean():.2f}%")
+                        
+                        # 액션 아이템
+                        st.markdown("---")
+                        st.markdown("##### 🎯 추천 액션 아이템")
+                        
+                        # 점유율 하위 30% 과목
+                        threshold_low_subj = mgr_subject_data['학생수대비점유율(%)'].quantile(0.3)
+                        low_subjects = mgr_subject_data[mgr_subject_data['학생수대비점유율(%)'] <= threshold_low_subj]
+                        
+                        if not low_subjects.empty:
+                            st.error(f"""
+                            **🔴 즉시 조치 필요 과목 ({len(low_subjects)}개)**
+                            
+                            {', '.join(low_subjects.nsmallest(10, '학생수대비점유율(%)')['과목명'].tolist())}
+                            
+                            **추천 액션:**
+                            1. 해당 과목 교사 대상 세미나/워크샵 개최
+                            2. 샘플 교재 제공 및 시험 채택 독려
+                            3. 경쟁사 대비 차별점 부각 마케팅
+                            4. 우수 사례 학교 방문 및 벤치마킹
+                            5. 가격 프로모션 또는 번들 상품 기획
+                            """)
+                        
+                        # 고성과 과목 (상위 30%)
+                        threshold_high_subj = mgr_subject_data['학생수대비점유율(%)'].quantile(0.7)
+                        high_subjects = mgr_subject_data[mgr_subject_data['학생수대비점유율(%)'] >= threshold_high_subj]
+                        
+                        if not high_subjects.empty:
+                            st.success(f"""
+                            **🟢 성과 우수 과목 ({len(high_subjects)}개)**
+                            
+                            {', '.join(high_subjects.nlargest(10, '학생수대비점유율(%)')['과목명'].tolist())}
+                            
+                            **추천 액션:**
+                            1. 성공 요인 분석 및 문서화 (왜 잘 팔렸는가?)
+                            2. 우수 사례 전사 공유 및 교육
+                            3. 관련 과목 크로스셀링 기회 발굴
+                            4. 채택 학교 만족도 조사 및 추천 유도
+                            5. 신규 에디션/부록 개발 검토
+                            """)
 
-            # 담당자별 '잘한/못한' 과목 (점유율 기준)
+            # 중복 코드 제거 (이미 위에서 처리됨)
             st.markdown("---")
             st.markdown("#### 🧠 담당자별 강점/약점 과목 (점유율=주문부수÷담당학생수)")
             for manager in selected_managers:
