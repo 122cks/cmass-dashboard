@@ -1148,18 +1148,93 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
                     aggfunc='sum'
                 ).fillna(0)
                 
-                fig_subject_heatmap = px.imshow(
-                    pivot_subject,
-                    labels=dict(x="과목명", y="담당자", color="점유율(%)"),
-                    x=pivot_subject.columns,
-                    y=pivot_subject.index,
-                    color_continuous_scale='YlOrRd',
-                    aspect='auto',
-                    title="담당자별 과목 점유율(담당학생수 대비 주문부수) 히트맵"
-                )
-                fig_subject_heatmap.update_layout(height=400, xaxis_tickangle=-45)
-                st.plotly_chart(fig_subject_heatmap, use_container_width=True)
-                st.caption("💡 진한 색: 점유율 높음 (담당학생수 대비 주문부수) | 옅은 색: 낮음")
+                # 히트맵 대신 중등/고등 과목별 점유율 테이블로 비교
+                st.markdown("#### 📊 담당자별 과목 점유율 비교 (학교급별)")
+                
+                # 학교급 태그로 과목 분류
+                subject_df_with_level = subject_df.copy()
+                def extract_level(subject_name):
+                    if pd.isna(subject_name):
+                        return '기타'
+                    s = str(subject_name)
+                    if '[고등]' in s or '[高]' in s:
+                        return '고등'
+                    elif '[중등]' in s or '[中]' in s:
+                        return '중등'
+                    elif '[초등]' in s or '[初]' in s:
+                        return '초등'
+                    else:
+                        return '기타'
+                
+                subject_df_with_level['학교급'] = subject_df_with_level['과목명'].apply(extract_level)
+                
+                # 학교급별 탭
+                level_tabs = st.tabs(["📘 중등 과목", "📕 고등 과목", "📗 전체"])
+                
+                with level_tabs[0]:  # 중등
+                    middle_df = subject_df_with_level[subject_df_with_level['학교급'] == '중등'].copy()
+                    if not middle_df.empty:
+                        middle_pivot = middle_df.pivot_table(
+                            index='과목명',
+                            columns='담당자',
+                            values='학생수대비점유율(%)',
+                            aggfunc='mean'
+                        ).fillna(0)
+                        middle_pivot = middle_pivot.round(2)
+                        middle_pivot['평균'] = middle_pivot.mean(axis=1).round(2)
+                        middle_pivot = middle_pivot.sort_values('평균', ascending=False).head(20)
+                        
+                        st.dataframe(
+                            middle_pivot.style.background_gradient(cmap='YlOrRd', axis=None)\
+                                .format("{:.2f}%"),
+                            use_container_width=True,
+                            height=600
+                        )
+                        st.caption("💡 중등 과목의 담당자별 점유율(주문부수÷담당학생수×100) - 상위 20개")
+                    else:
+                        st.info("중등 과목 데이터가 없습니다.")
+                
+                with level_tabs[1]:  # 고등
+                    high_df = subject_df_with_level[subject_df_with_level['학교급'] == '고등'].copy()
+                    if not high_df.empty:
+                        high_pivot = high_df.pivot_table(
+                            index='과목명',
+                            columns='담당자',
+                            values='학생수대비점유율(%)',
+                            aggfunc='mean'
+                        ).fillna(0)
+                        high_pivot = high_pivot.round(2)
+                        high_pivot['평균'] = high_pivot.mean(axis=1).round(2)
+                        high_pivot = high_pivot.sort_values('평균', ascending=False).head(20)
+                        
+                        st.dataframe(
+                            high_pivot.style.background_gradient(cmap='YlOrRd', axis=None)\
+                                .format("{:.2f}%"),
+                            use_container_width=True,
+                            height=600
+                        )
+                        st.caption("💡 고등 과목의 담당자별 점유율(주문부수÷담당학생수×100) - 상위 20개")
+                    else:
+                        st.info("고등 과목 데이터가 없습니다.")
+                
+                with level_tabs[2]:  # 전체
+                    all_pivot = subject_df_with_level.pivot_table(
+                        index='과목명',
+                        columns='담당자',
+                        values='학생수대비점유율(%)',
+                        aggfunc='mean'
+                    ).fillna(0)
+                    all_pivot = all_pivot.round(2)
+                    all_pivot['평균'] = all_pivot.mean(axis=1).round(2)
+                    all_pivot = all_pivot.sort_values('평균', ascending=False).head(30)
+                    
+                    st.dataframe(
+                        all_pivot.style.background_gradient(cmap='YlOrRd', axis=None)\
+                            .format("{:.2f}%"),
+                        use_container_width=True,
+                        height=600
+                    )
+                    st.caption("💡 전체 과목의 담당자별 점유율(주문부수÷담당학생수×100) - 상위 30개")
                 
                 # 담당자별 간단한 요약
                 st.markdown("---")
