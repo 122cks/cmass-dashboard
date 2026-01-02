@@ -989,10 +989,21 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             key='subject_manager_select'
         )
         
+        # 디버깅: 사용 가능한 과목 컬럼 확인
+        available_cols = []
+        if '교과서명_구분' in filtered_order.columns:
+            available_cols.append('교과서명_구분')
+        if '과목명' in filtered_order.columns:
+            available_cols.append('과목명')
+        
+        if available_cols:
+            st.info(f"📊 사용 가능한 과목 컬럼: {', '.join(available_cols)}")
+        
         # 과목명 표시: 교과서명_구분 우선 사용 (이미 [고등]/[중등] 태그 포함)
         if '교과서명_구분' in filtered_order.columns:
             filtered_order_copy = filtered_order.copy()
             filtered_order_copy['과목명_표시'] = filtered_order_copy['교과서명_구분']
+            st.success("✅ 교과서명_구분 사용 중 (학교급 태그 포함)")
         elif '과목명' in filtered_order.columns:
             # 학교급 정보를 과목명에 추가
             if '학교급' in filtered_order.columns:
@@ -1065,7 +1076,7 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
 
                     subject_analysis.append({
                         '담당자': manager,
-                        '과목명': subject,
+                        '과목명': subject,  # subject는 이미 과목명_표시 값 (태그 포함)
                         '주문부수': subject_orders,
                         '학교수': subject_schools,
                         '담당학생수': level_students,
@@ -1074,7 +1085,7 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             
             subject_df = pd.DataFrame(subject_analysis)
             
-            # 전체 과목별 평균(점유율 기준) 계산
+            # 전체 과목별 평균(점유율 기준) 계산 - 과목명에 이미 태그 포함됨
             subject_avg = subject_df.groupby('과목명')['학생수대비점유율(%)'].mean().reset_index()
             subject_avg.columns = ['과목명', '평균점유율(%)']
 
