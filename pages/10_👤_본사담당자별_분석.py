@@ -43,6 +43,16 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             right_on='정보공시 학교코드',
             how='left'
         )
+        # 주문 데이터에 학교급 정보가 없으면 total_df에서 병합하여 추가
+        if '학교급' not in order_df.columns and '정보공시 학교코드' in total_df.columns and '학교급' in total_df.columns:
+            school_level_map = total_df[['정보공시 학교코드', '학교급']].drop_duplicates()
+            order_df = pd.merge(
+                order_df,
+                school_level_map,
+                left_on=school_code_col,
+                right_on='정보공시 학교코드',
+                how='left'
+            )
     
     # 본사담당자 목록
     managers = sorted([m for m in total_df['본사담당자(2025.09)'].dropna().unique() if m != ''])
