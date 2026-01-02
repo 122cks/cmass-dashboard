@@ -47,7 +47,11 @@ if not st.session_state.get('auth_ok', False):
                 st.session_state['auth_ok'] = True
                 st.session_state['auth_attempts'] = 0
                 st.session_state['auth_lock_until'] = None
-                st.experimental_rerun()
+                _rerun = getattr(st, 'experimental_rerun', None)
+                if callable(_rerun):
+                    _rerun()
+                elif getattr(st, 'rerun', None):
+                    st.rerun()
             else:
                 st.session_state['auth_attempts'] += 1
                 if st.session_state['auth_attempts'] >= MAX_ATTEMPTS:

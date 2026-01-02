@@ -7,6 +7,8 @@ import os
 
 # Use utils package imports
 from utils.common_filters import apply_common_filters, show_filter_summary
+from utils.year_filter import add_year_filter_sidebar, filter_by_years, create_year_comparison_metrics
+from utils.market_share_calculator import calculate_both_shares, compare_year_shares
 
 st.set_page_config(page_title="지역별 분석", page_icon="🗺️", layout="wide")
 apply_custom_style()
@@ -17,7 +19,14 @@ if 'total_df' not in st.session_state or 'order_df' not in st.session_state:
     st.stop()
 
 total_df = st.session_state['total_df']
-order_df = st.session_state['order_df']
+order_df_orig = st.session_state['order_df'].copy()
+
+# 학년도 필터 추가 (기본값: 2026)
+selected_years, comparison_mode = add_year_filter_sidebar(order_df_orig, default_year='2026')
+if selected_years:
+    order_df = filter_by_years(order_df_orig, selected_years)
+else:
+    order_df = order_df_orig
 distributor_df = st.session_state.get('distributor_df', pd.DataFrame())
 market_analysis = st.session_state.get('market_analysis', pd.DataFrame())  # 시장 분석 데이터
 
@@ -51,6 +60,10 @@ if not distributor_df.empty and '총판명' in distributor_df.columns:
 
 st.title("🗺️ 지역별 상세 분석")
 st.markdown("---")
+
+# 연도별 비교 모드 안내
+if comparison_mode:
+    st.info("📊 **연도 비교 모드**: 2025년과 2026년 데이터를 비교하여 부수, 학교점유율, 학생수점유율의 증감을 확인할 수 있습니다.")
 
 # Modal for detailed region info
 @st.dialog("🗺️ 지역 상세 정보", width="large")
@@ -320,46 +333,67 @@ with tab1:
         region_stats = pd.merge(region_stats, region_schools_adopted, on='시도교육청', how='left')
         region_stats = region_stats.fillna(0)
         
-        # 계산
-        region_stats['점유율(%)'] = (region_stats['주문부수'] / region_stats['전체학생수']) * 100
-        region_stats['학교채택률(%)'] = (region_stats['채택학교수'] / region_stats['전체학교수']) * 100
-        region_stats['미점유학생'] = region_stats['전체학생수'] - region_stats['주문부수']
+        # 채택학교 학생수 계산 (채택한 학교들의 학생수 합계)
+        if school_code_col in filtered_order_df.columns:
+            # 채택 학교 목록
+            adopted_schools_by_region = filtered_order_df.groupby('시도교육청')[school_code_col].unique()
+            
+            # 각 지역의 채택학교 학생수 계산
+            채택학교학생수_list = []
+            for region in region_stats['시도교육청']:
+                if region in adopted_schools_by_region.index:
+                    adopted_schools = adopted_schools_by_region[region]
+                    # 해당 학교들의 학생수 합계
+                    school_code_col_total = '정보공시 학교코드' if '정보공시 학교코드' in filtered_total_df.columns else '학교코드'
+                    students = filtered_total_df[filtered_total_df[school_code_col_total].isin(adopted_schools)]['학생수(계)'].sum()
+                    채택학교학생수_list.append(students)
+                else:
+                    채택학교학생수_list.append(0)
+            
+            region_stats['채택학교학생수'] = 채택학교학생수_list
+        else:
+            region_stats['채택학교학생수'] = 0
+        
+        # 점유율 계산
+        region_stats['학교점유율(%)'] = (region_stats['채택학교수'] / region_stats['전체학교수'] * 100).fillna(0)
+        region_stats['학생수점유율(%)'] = (region_stats['채택학교학생수'] / region_stats['전체학생수'] * 100).fillna(0)
+        region_stats['미점유학생'] = region_stats['전체학생수'] - region_stats['채택학교학생수']
         region_stats['미채택학교'] = region_stats['전체학교수'] - region_stats['채택학교수']
-        region_stats = region_stats.sort_values('점유율(%)', ascending=False)
+        region_stats = region_stats.sort_values('학생수점유율(%)', ascending=False)
         
         # 지역 클릭 안내
-        st.info("💡 **아래 차트와 테이블**에서 지역별 학생 점유율과 학교 채택률을 함께 확인할 수 있습니다.")
+        st.info("💡 **아래 차트에서** 학교점유율(채택학교수/전체학교수)과 학생수점유율(채택학교학생수/전체학생수)을 함께 확인할 수 있습니다.")
         
         # 3열 차트로 변경
         col1, col2, col3 = st.columns(3)
         
         with col1:
-            # Bar chart - 학생 점유율
+            # Bar chart - 학교점유율
             fig = px.bar(
                 region_stats,
                 x='시도교육청',
-                y='점유율(%)',
-                title="시도별 학생 점유율",
-                text='점유율(%)',
-                color='점유율(%)',
-                color_continuous_scale='RdYlGn'
+                y='학교점유율(%)',
+                title="시도별 학교점유율 (채택학교수/전체학교수)",
+                text='학교점유율(%)',
+                color='학교점유율(%)',
+                color_continuous_scale='Blues'
             )
-            fig.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+            fig.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
             fig.update_layout(height=500, xaxis_tickangle=-45)
             st.plotly_chart(fig, use_container_width=True)
         
         with col2:
-            # Bar chart - 학교 채택률
+            # Bar chart - 학생수점유율
             fig2 = px.bar(
                 region_stats,
                 x='시도교육청',
-                y='학교채택률(%)',
-                title="시도별 학교 채택률",
-                text='학교채택률(%)',
-                color='학교채택률(%)',
-                color_continuous_scale='Blues'
+                y='학생수점유율(%)',
+                title="시도별 학생수점유율 (채택학교학생수/전체학생수)",
+                text='학생수점유율(%)',
+                color='학생수점유율(%)',
+                color_continuous_scale='RdYlGn'
             )
-            fig2.update_traces(texttemplate='%{text:.1f}%', textposition='outside')
+            fig2.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
             fig2.update_layout(height=500, xaxis_tickangle=-45)
             st.plotly_chart(fig2, use_container_width=True)
         

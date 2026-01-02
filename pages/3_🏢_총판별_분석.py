@@ -8,6 +8,8 @@ import os
 
 # Use utils package imports
 from utils.common_filters import apply_common_filters, show_filter_summary
+from utils.year_filter import add_year_filter_sidebar, filter_by_years, create_year_comparison_metrics
+from utils.market_share_calculator import calculate_both_shares, compare_year_shares
 
 st.set_page_config(page_title="총판별 분석", page_icon="🏢", layout="wide")
 apply_custom_style()
@@ -18,12 +20,24 @@ if 'total_df' not in st.session_state or 'order_df' not in st.session_state:
     st.stop()
 
 total_df = st.session_state['total_df']
-order_df = st.session_state['order_df'].copy()
+order_df_orig = st.session_state['order_df'].copy()
+
+# 학년도 필터 추가
+selected_years, comparison_mode = add_year_filter_sidebar(order_df_orig, default_year='2026')
+if selected_years:
+    order_df = filter_by_years(order_df_orig, selected_years)
+else:
+    order_df = order_df_orig
+
 target_df = st.session_state.get('target_df', pd.DataFrame())  # 목표 데이터 로드
 distributor_df = st.session_state.get('distributor_df', pd.DataFrame())  # 총판 정보 로드
 
 st.title("🏢 총판별 상세 분석")
 st.markdown("---")
+
+# 연도별 비교 모드 안내
+if comparison_mode:
+    st.info("📊 **연도 비교 모드**: 2025년과 2026년 데이터를 비교하여 부수, 학교점유율, 학생수점유율의 증감을 확인할 수 있습니다.")
 
 # Modal for detailed distributor info
 @st.dialog("🏢 총판 상세 정보", width="large")

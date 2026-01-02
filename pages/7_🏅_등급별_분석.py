@@ -4,6 +4,7 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from utils.year_filter import add_year_filter_sidebar, filter_by_years, create_year_comparison_metrics
 
 st.set_page_config(page_title="등급별 분석", page_icon="🏅", layout="wide")
 apply_custom_style()
@@ -14,10 +15,17 @@ if 'order_df' not in st.session_state:
     st.stop()
 
 # 🚨 등급별 분석은 목표과목 필터된 데이터 사용
-order_df = st.session_state.get('order_df_target_filtered', st.session_state['order_df']).copy()
+order_df_orig = st.session_state.get('order_df_target_filtered', st.session_state['order_df']).copy()
 distributor_df = st.session_state.get('distributor_df', pd.DataFrame())
 target_df = st.session_state.get('target_df', pd.DataFrame())
 sort_by_grade = st.session_state.get('sort_by_grade', None)
+
+# 학년도 필터 추가
+selected_years, comparison_mode = add_year_filter_sidebar(order_df_orig, default_year='2026')
+if selected_years:
+    order_df = filter_by_years(order_df_orig, selected_years)
+else:
+    order_df = order_df_orig
 total_df = st.session_state.get('total_df', pd.DataFrame())
 market_analysis = st.session_state.get('market_analysis', pd.DataFrame())  # 시장 분석 데이터
 

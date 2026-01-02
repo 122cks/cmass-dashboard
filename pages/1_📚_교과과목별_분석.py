@@ -8,6 +8,8 @@ import os
 
 # Use utils package imports
 from utils.common_filters import apply_common_filters, show_filter_summary
+from utils.year_filter import add_year_filter_sidebar, filter_by_years, create_year_comparison_metrics
+from utils.market_share_calculator import calculate_both_shares, compare_year_shares
 
 st.set_page_config(page_title="교과/과목별 분석", page_icon="📚", layout="wide")
 apply_custom_style()
@@ -21,8 +23,17 @@ total_df = st.session_state['total_df']
 order_df = st.session_state['order_df'].copy()
 market_analysis = st.session_state.get('market_analysis', pd.DataFrame())  # 시장 분석 데이터
 
+# 학년도 필터 추가 (기본값: 2026)
+selected_years, comparison_mode = add_year_filter_sidebar(order_df, default_year='2026')
+if selected_years:
+    order_df = filter_by_years(order_df, selected_years)
+
 st.title("📚 교과/과목별 상세 분석")
 st.markdown("---")
+
+# 연도별 비교 모드 안내
+if comparison_mode:
+    st.info("📊 **연도 비교 모드**: 2025년과 2026년 데이터를 비교하여 부수, 학교점유율, 학생수점유율의 증감을 확인할 수 있습니다.")
 
 # Helper function to classify subject by school level
 def get_school_level_from_subject(subject_name):
@@ -203,6 +214,17 @@ show_filter_summary(filtered_order_df, st.session_state['order_df'])
 st.sidebar.markdown("---")
 st.sidebar.info(f"📊 필터링된 데이터: {len(filtered_order_df):,}건")
 
+# 성과 알림 설정
+st.sidebar.markdown("---")
+st.sidebar.header("🔔 성과 알림 설정")
+has_year = '학년도' in filtered_order_df.columns
+compare_options = ['없음']
+if has_year:
+    compare_options.append('전년(학년도)')
+compare_by = st.sidebar.selectbox("비교 기준", compare_options)
+up_threshold = st.sidebar.number_input("상승 임계값 (퍼센트포인트)", min_value=0.0, value=10.0, step=1.0)
+down_threshold = st.sidebar.number_input("감소 임계값 (퍼센트포인트)", min_value=0.0, value=10.0, step=1.0)
+
 # Main Analysis
 col1, col2, col3 = st.columns(3)
 
@@ -218,6 +240,13 @@ with col3:
     subject_col = '교과서명_구분' if '교과서명_구분' in filtered_order_df.columns else '교과서명'
     unique_subjects = filtered_order_df[subject_col].nunique() if subject_col in filtered_order_df.columns else 0
     st.metric("과목 종류", f"{unique_subjects}개")
+
+# 연도 비교 모드일 경우 비교 메트릭 표시
+if comparison_mode and '학년도' in filtered_order_df.columns:
+    df_2025 = filtered_order_df[filtered_order_df['학년도'].astype(str) == '2025']
+    df_2026 = filtered_order_df[filtered_order_df['학년도'].astype(str) == '2026']
+    if not df_2025.empty and not df_2026.empty:
+        create_year_comparison_metrics(df_2025, df_2026, {'부수': '주문 부수', '금액': '주문 금액'})
 
 st.markdown("---")
 # Tab Layout
@@ -251,6 +280,103 @@ with tab1:
         subject_stats.columns = ['과목명', '주문부수', '주문금액', '학교수']
     
     subject_stats = subject_stats.sort_values('주문부수', ascending=False)
+    # ----------------------------
+    # 채택(주문) 학교수 및 학생수 기반 점유율 계산
+    # ----------------------------
+    # 학교 코드 컬럼 이름 확인 (order vs total df 차이 처리)
+    total_school_code_col = None
+    for c in total_df.columns:
+        if '학교코드' in c:
+            total_school_code_col = c
+            break
+
+    student_col = '학생수(계)' if '학생수(계)' in total_df.columns else None
+
+    # 학교 -> 학생수 매핑 생성
+    school_student_map = {}
+    if total_school_code_col and student_col:
+        school_student_map = total_df.dropna(subset=[total_school_code_col]).set_index(total_school_code_col)[student_col].to_dict()
+
+    # 과목 기준 컬럼 결정 (도서코드 우선)
+    subject_group_col = '도서코드' if '도서코드' in subject_stats.columns else '과목명'
+
+    # 채택 학교수 및 채택 학교 학생수 계산
+    adopted_school_counts = []
+    adopted_school_students = []
+    for _, r in subject_stats.iterrows():
+        key = r[subject_group_col]
+        if subject_group_col == '도서코드':
+            sel = filtered_order_df[filtered_order_df[book_code_col].astype(str) == str(key)]
+        else:
+            sel = filtered_order_df[filtered_order_df[subject_col] == key] if 'subject_col' in locals() else filtered_order_df[filtered_order_df['과목명'] == key]
+
+        adopted_schools = sel[school_code_col].dropna().unique().tolist() if school_code_col in sel.columns else []
+        adopted_school_counts.append(len(adopted_schools))
+
+        # 해당 채택 학교들의 학생수 합
+        adopted_students = 0
+        if school_student_map and len(adopted_schools) > 0:
+            for sc in adopted_schools:
+                # 매핑 키 유형 일관화: 문자열/숫자
+                adopted_students += float(school_student_map.get(sc, school_student_map.get(str(sc), 0)))
+        adopted_school_students.append(adopted_students)
+
+    subject_stats['채택학교수'] = adopted_school_counts
+    subject_stats['채택학교학생수'] = adopted_school_students
+
+    # 전체 담당(분석) 기준 학생수 및 학교수(전체 시장규모) 사용
+    total_students_filtered = total_df['학생수(계)'].sum() if '학생수(계)' in total_df.columns else 0
+    total_school_count = total_df[total_school_code_col].nunique() if total_school_code_col else 0
+
+    # 학교 점유율 및 학생수 점유율
+    subject_stats['학교점유율(%)'] = (subject_stats['채택학교수'] / subject_stats.get('학교수', total_school_count).replace(0, total_school_count) * 100).fillna(0)
+    subject_stats['학생수점유율(%)'] = (subject_stats['채택학교학생수'] / total_students_filtered * 100).fillna(0)
+
+    # 이전 기간(전년) 대비 학생수 점유율 계산 및 알림 생성
+    prev_shares = {}
+    if compare_by == '전년(학년도)' and '학년도' in filtered_order_df.columns:
+        try:
+            # current year determined from filtered data
+            current_year_vals = pd.to_numeric(filtered_order_df['학년도'], errors='coerce').dropna().astype(int)
+            if not current_year_vals.empty:
+                current_year = int(current_year_vals.max())
+                prev_year = current_year - 1
+                prev_df = filtered_order_df[filtered_order_df['학년도'].astype(str) == str(prev_year)]
+
+                # compute prev adopted students per subject
+                for _, r in subject_stats.iterrows():
+                    key = r[subject_group_col]
+                    if subject_group_col == '도서코드':
+                        sel_prev = prev_df[prev_df[book_code_col].astype(str) == str(key)]
+                    else:
+                        sel_prev = prev_df[prev_df[subject_col] == key] if 'subject_col' in locals() else prev_df[prev_df['과목명'] == key]
+
+                    prev_adopted_schools = sel_prev[school_code_col].dropna().unique().tolist() if school_code_col in sel_prev.columns else []
+                    prev_adopted_students = 0
+                    if school_student_map and len(prev_adopted_schools) > 0:
+                        for sc in prev_adopted_schools:
+                            prev_adopted_students += float(school_student_map.get(sc, school_student_map.get(str(sc), 0)))
+
+                    prev_share = (prev_adopted_students / total_students_filtered * 100) if total_students_filtered > 0 else 0
+                    prev_shares[key] = prev_share
+        except Exception:
+            prev_shares = {}
+
+    # 알림 리스트 생성
+    alerts_up = []
+    alerts_down = []
+    if prev_shares:
+        for _, r in subject_stats.iterrows():
+            key = r[subject_group_col]
+            cur_share = r.get('학생수점유율(%)', 0)
+            prev_share = prev_shares.get(key, None)
+            if prev_share is None:
+                continue
+            diff = cur_share - prev_share
+            if diff >= up_threshold:
+                alerts_up.append((r.get('과목명', key), cur_share, prev_share, diff))
+            if diff <= -down_threshold:
+                alerts_down.append((r.get('과목명', key), cur_share, prev_share, diff))
     
     # 정확한 시장점유율 계산 (market_analysis 데이터 활용)
     if not market_analysis.empty and '도서코드' in market_analysis.columns:
@@ -320,6 +446,44 @@ with tab1:
         fig.update_traces(texttemplate='%{text:,.0f}', textposition='outside')
         fig.update_layout(height=500, showlegend=True)
         st.plotly_chart(fig, use_container_width=True)
+        
+        # 추가: 학생수 기준 점유율 막대 차트 (TOP 20)
+        if '학생수점유율(%)' in subject_stats.columns:
+            fig_share = px.bar(
+                subject_stats.sort_values('학생수점유율(%)', ascending=False).head(20),
+                x='과목명',
+                y='학생수점유율(%)',
+                title='과목별 학생수 점유율 TOP 20',
+                text='학생수점유율(%)',
+                color='학교급',
+                color_discrete_map={'중학교': '#4A90E2', '고등학교': '#E94B3C', '미분류': '#9E9E9E'}
+            )
+            fig_share.update_traces(texttemplate='%{text:.2f}%', textposition='outside')
+            fig_share.update_layout(height=400)
+            # hover에 채택학교수/채택학교학생수 노출
+            if '채택학교수' in subject_stats.columns and '채택학교학생수' in subject_stats.columns:
+                fig_share.update_traces(hovertemplate='%{x}<br>학생수점유율: %{y:.2f}%<br>채택학교수: %{customdata[0]}<br>채택학교학생수: %{customdata[1]:,.0f}')
+                fig_share.update_traces(customdata=subject_stats.sort_values('학생수점유율(%)').head(20)[['채택학교수','채택학교학생수']].values)
+            st.plotly_chart(fig_share, use_container_width=True)
+
+            # 성과 알림 표시
+            if compare_by != '없음':
+                with st.expander('🔔 과목별 성과 알림 (학생수 점유율 변화)', expanded=True):
+                    if not prev_shares:
+                        st.info('비교 대상 기간의 데이터가 충분하지 않습니다.')
+                    else:
+                        if alerts_up:
+                            st.success(f"상승 알림: {len(alerts_up)}개 과목")
+                            for name, cur, prev, diff in alerts_up:
+                                st.write(f"▲ {name}: 현재 {cur:.2f}% (이전 {prev:.2f}%), 차이 +{diff:.2f}pp")
+                        else:
+                            st.write('상승 알림 없음')
+                        if alerts_down:
+                            st.error(f"감소 알림: {len(alerts_down)}개 과목")
+                            for name, cur, prev, diff in alerts_down:
+                                st.write(f"▼ {name}: 현재 {cur:.2f}% (이전 {prev:.2f}%), 차이 {diff:.2f}pp")
+                        else:
+                            st.write('감소 알림 없음')
     
     with col2:
         # Pie chart for top subjects
@@ -354,7 +518,7 @@ with tab1:
         with col_schools:
             st.write(f"{row['학교수']:,.0f}개교")
         with col_share:
-            st.write(f"{row['점유율(%)']:.1f}%")
+            st.write(f"{row.get('학생수점유율(%)', row.get('점유율(%)', 0)):.1f}%")
 
 with tab2:
     st.subheader("교과군별 분석")
@@ -652,7 +816,7 @@ with tab4:
                 📦 주문: {row['주문부수']:,.0f}부 | 💰 금액: {row['주문금액']:,.0f}원  
                 🏫 학교수: {row['학교수']}개 | 📊 점유율: {row['점유율(%)']:.2f}%
                 """)
-                st.progress(min(row['점유율(%)'] / 100, 1.0))
+                st.progress(min(row.get('학생수점유율(%)', row.get('점유율(%)', 0)) / 100, 1.0))
     
     with col2:
         # Subject performance ranking
@@ -667,7 +831,7 @@ with tab4:
             x='학교수',
             y='학교당평균',
             size='주문부수',
-            color='점유율(%)',
+            color='학생수점유율(%)' if '학생수점유율(%)' in subject_stats_ranked.columns else '점유율(%)',
             hover_name='과목명',
             title="과목별 효율성 분석 (학교수 vs 학교당 평균)",
             labels={'학교수': '주문 학교 수', '학교당평균': '학교당 평균 주문량'}
@@ -726,7 +890,8 @@ with tab5:
         for idx, row in top5.iterrows():
             # Performance card with gradient
             efficiency_score = row['학교당평균'] if '학교당평균' in row else 0
-            color = "#28a745" if row['점유율(%)'] > 50 else "#ffc107" if row['점유율(%)'] > 30 else "#dc3545"
+            pct = row.get('학생수점유율(%)', row.get('점유율(%)', 0))
+            color = "#28a745" if pct > 50 else "#ffc107" if pct > 30 else "#dc3545"
             
             st.markdown(f"""
             <div style='background: linear-gradient(135deg, {color}20 0%, {color}40 100%); 
@@ -735,7 +900,7 @@ with tab5:
                 <h4 style='margin:0; color: {color};'>{row['과목명']}</h4>
                 <p style='margin: 5px 0;'>
                     <b>주문 부수:</b> {row['주문부수']:,.0f}부 | 
-                    <b>점유율:</b> {row['점유율(%)']:.1f}%
+                    <b>점유율:</b> {row.get('학생수점유율(%)', row.get('점유율(%)', 0)):.1f}%
                 </p>
                 <p style='margin: 5px 0;'>
                     <b>학교 수:</b> {row['학교수']:,.0f}개 | 
@@ -748,9 +913,14 @@ with tab5:
         st.markdown("#### 📊 성과 분석 지표")
         
         # Performance metrics
-        high_performers = len(subject_stats[subject_stats['점유율(%)'] > 50])
-        mid_performers = len(subject_stats[(subject_stats['점유율(%)'] >= 30) & (subject_stats['점유율(%)'] <= 50)])
-        low_performers = len(subject_stats[subject_stats['점유율(%)'] < 30])
+        if '학생수점유율(%)' in subject_stats.columns:
+            high_performers = len(subject_stats[subject_stats['학생수점유율(%)'] > 50])
+            mid_performers = len(subject_stats[(subject_stats['학생수점유율(%)'] >= 30) & (subject_stats['학생수점유율(%)'] <= 50)])
+            low_performers = len(subject_stats[subject_stats['학생수점유율(%)'] < 30])
+        else:
+            high_performers = len(subject_stats[subject_stats['점유율(%)'] > 50])
+            mid_performers = len(subject_stats[(subject_stats['점유율(%)'] >= 30) & (subject_stats['점유율(%)'] <= 50)])
+            low_performers = len(subject_stats[subject_stats['점유율(%)'] < 30])
         
         metric_col1, metric_col2, metric_col3 = st.columns(3)
         metric_col1.metric("우수 (50%↑)", f"{high_performers}개", help="점유율 50% 이상")
@@ -767,7 +937,7 @@ with tab5:
                         margin-bottom: 10px; border-left: 4px solid #ffc107;'>
                 <p style='margin:0;'><b>{row['과목명']}</b></p>
                 <p style='margin: 5px 0; font-size: 0.9em;'>
-                    주문: {row['주문부수']:,.0f}부 | 점유율: {row['점유율(%)']:.1f}% | 
+                    주문: {row['주문부수']:,.0f}부 | 점유율: {row.get('학생수점유율(%)', row.get('점유율(%)', 0)):.1f}% | 
                     학교: {row['학교수']:,.0f}개
                 </p>
                 <p style='margin: 0; font-size: 0.85em; color: #856404;'>
@@ -780,7 +950,7 @@ with tab5:
         st.markdown("#### 🎯 전략적 제안")
         
         # Strategic recommendations
-        avg_share = subject_stats['점유율(%)'].mean()
+        avg_share = subject_stats['학생수점유율(%)'].mean() if '학생수점유율(%)' in subject_stats.columns else subject_stats['점유율(%)'].mean()
         avg_schools = subject_stats['학교수'].mean()
         
         st.info(f"""
@@ -818,6 +988,9 @@ with tab6:
             '주문부수': '{:,.0f}',
             '주문금액': '{:,.0f}',
             '학교수': '{:,.0f}',
+            '채택학교수': '{:,.0f}',
+            '채택학교학생수': '{:,.0f}',
+            '학생수점유율(%)': '{:.2f}%',
             '점유율(%)': '{:.2f}%',
             '학교당평균': '{:.2f}'
         }),

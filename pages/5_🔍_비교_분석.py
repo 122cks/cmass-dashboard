@@ -4,6 +4,8 @@ import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
+from utils.year_filter import add_year_filter_sidebar, filter_by_years, create_year_comparison_metrics
+from utils.market_share_calculator import calculate_both_shares, compare_year_shares
 
 st.set_page_config(page_title="비교 분석", page_icon="🔍", layout="wide")
 apply_custom_style()
@@ -14,8 +16,15 @@ if 'total_df' not in st.session_state or 'order_df' not in st.session_state:
     st.stop()
 
 total_df = st.session_state['total_df']
-order_df = st.session_state['order_df']
+order_df_orig = st.session_state['order_df'].copy()
 market_analysis = st.session_state.get('market_analysis', pd.DataFrame())  # 시장 분석 데이터
+
+# 학년도 필터 추가
+selected_years, comparison_mode = add_year_filter_sidebar(order_df_orig, default_year='2026')
+if selected_years:
+    order_df = filter_by_years(order_df_orig, selected_years)
+else:
+    order_df = order_df_orig
 
 st.title("🔍 다차원 비교 분석")
 st.markdown("---")

@@ -77,7 +77,12 @@ if DEV_MODE:
             ]:
                 if k in st.session_state:
                     del st.session_state[k]
-            st.experimental_rerun()
+            # Use getattr to avoid Pylance attribute warning for experimental API
+            _rerun = getattr(st, 'experimental_rerun', None)
+            if callable(_rerun):
+                _rerun()
+            elif getattr(st, 'rerun', None):
+                st.rerun()
 
 # 관리자용: 캐시/세션 초기화 도구 (배포에서 stale cache로 데이터가 비어 보이는 문제 대응)
 if bool(st.session_state.get('auth_ok', False)):

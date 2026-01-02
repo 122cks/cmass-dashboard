@@ -6,6 +6,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 from typing import cast
+from utils.year_filter import add_year_filter_sidebar, filter_by_years, create_year_comparison_metrics
+from utils.market_share_calculator import calculate_both_shares, compare_year_shares
 
 st.set_page_config(page_title="수도권/지방 분석", page_icon="🗺️", layout="wide")
 apply_custom_style()
@@ -15,8 +17,15 @@ if 'order_df' not in st.session_state or 'total_df' not in st.session_state:
     st.error("데이터를 불러올 수 없습니다. 메인 페이지로 돌아가주세요.")
     st.stop()
 
-order_df = st.session_state.get('order_df', pd.DataFrame()).copy()
+order_df_orig = st.session_state.get('order_df', pd.DataFrame()).copy()
 total_df = st.session_state.get('total_df', pd.DataFrame()).copy()
+
+# 학년도 필터 추가
+selected_years, comparison_mode = add_year_filter_sidebar(order_df_orig, default_year='2026')
+if selected_years:
+    order_df = filter_by_years(order_df_orig, selected_years)
+else:
+    order_df = order_df_orig
 
 st.title("🗺️ 수도권/지방 분석")
 st.markdown("---")

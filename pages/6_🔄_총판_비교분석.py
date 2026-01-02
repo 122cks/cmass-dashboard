@@ -5,6 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 from typing import Mapping, Any, cast
+from utils.year_filter import add_year_filter_sidebar, filter_by_years, create_year_comparison_metrics
 
 st.set_page_config(page_title="총판 비교분석", page_icon="🔄", layout="wide")
 apply_custom_style()
@@ -15,9 +16,16 @@ if 'total_df' not in st.session_state or 'order_df' not in st.session_state:
     st.stop()
 
 total_df = st.session_state['total_df']
-order_df = st.session_state['order_df']
+order_df_orig = st.session_state['order_df'].copy()
 target_df = st.session_state.get('target_df', pd.DataFrame())
 distributor_df = st.session_state.get('distributor_df', pd.DataFrame())
+
+# 학년도 필터 추가
+selected_years, comparison_mode = add_year_filter_sidebar(order_df_orig, default_year='2026')
+if selected_years:
+    order_df = filter_by_years(order_df_orig, selected_years)
+else:
+    order_df = order_df_orig
 market_analysis = st.session_state.get('market_analysis', pd.DataFrame())  # 시장 분석 데이터
 subject_market_by_dist = st.session_state.get('subject_market_by_dist', pd.DataFrame())  # 총판별 과목 시장
 

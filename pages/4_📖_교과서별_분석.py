@@ -3,6 +3,8 @@ from utils.style import apply_custom_style
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
+from utils.year_filter import add_year_filter_sidebar, filter_by_years, create_year_comparison_metrics
+from utils.market_share_calculator import calculate_both_shares, compare_year_shares
 
 st.set_page_config(page_title="교과서별 분석", page_icon="📖", layout="wide")
 apply_custom_style()
@@ -12,7 +14,12 @@ if 'order_df' not in st.session_state:
     st.error("데이터를 불러올 수 없습니다. 메인 페이지로 돌아가주세요.")
     st.stop()
 
-order_df = st.session_state['order_df']
+order_df_orig = st.session_state['order_df'].copy()
+selected_years, comparison_mode = add_year_filter_sidebar(order_df_orig, default_year='2026')
+if selected_years:
+    order_df = filter_by_years(order_df_orig, selected_years)
+else:
+    order_df = order_df_orig
 
 st.title("📖 교과서별 상세 분석")
 st.markdown("---")

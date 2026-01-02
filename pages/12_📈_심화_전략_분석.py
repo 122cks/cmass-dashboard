@@ -6,6 +6,8 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 from typing import cast
+from utils.year_filter import add_year_filter_sidebar, filter_by_years, create_year_comparison_metrics
+from utils.market_share_calculator import calculate_both_shares, compare_year_shares
 
 st.set_page_config(page_title="심화 전략 분석", page_icon="📈", layout="wide")
 apply_custom_style()
@@ -15,9 +17,16 @@ if 'order_df' not in st.session_state or 'total_df' not in st.session_state:
     st.error("데이터를 불러올 수 없습니다. 메인 페이지로 돌아가주세요.")
     st.stop()
 
-order_df = st.session_state.get('order_df', pd.DataFrame()).copy()
+order_df_orig = st.session_state.get('order_df', pd.DataFrame()).copy()
 total_df = st.session_state.get('total_df', pd.DataFrame()).copy()
 target_df = st.session_state.get('target_df', pd.DataFrame()).copy()
+
+# 학년도 필터 추가
+selected_years, comparison_mode = add_year_filter_sidebar(order_df_orig, default_year='2026')
+if selected_years:
+    order_df = filter_by_years(order_df_orig, selected_years)
+else:
+    order_df = order_df_orig
 
 st.title("📈 심화 전략 분석 (Advanced Analytics)")
 st.markdown("---")
@@ -143,8 +152,18 @@ with tab2:
     st.header("📉 이탈 학교 분석 (Churn Analysis)")
     st.markdown("2025년에는 주문했으나, **2026년에는 주문이 없는 학교**를 식별합니다.")
     
-    school_col = '정보공시학교코드' if '정보공시학교코드' in order_df.columns else '학교코드'
-    
+    # 학교 코드 컬럼 안전 선택 (가장 먼저 존재하는 컬럼 사용)
+    possible_cols = ['정보공시학교코드', '정보공시 학교코드', '학교코드']
+    school_col = None
+    for c in possible_cols:
+        if c in df_2025.columns or c in df_2026.columns:
+            school_col = c
+            break
+
+    if school_col is None:
+        st.error("학교 코드 컬럼을 찾을 수 없습니다. ('정보공시학교코드' 또는 '학교코드' 컬럼 필요)")
+        st.stop()
+
     schools_2025 = set(df_2025[school_col].unique())
     schools_2026 = set(df_2026[school_col].unique())
     
@@ -154,11 +173,22 @@ with tab2:
         churn_df = df_2025[df_2025[school_col].isin(churned_schools)].copy()
         
         # 학교별 요약
-        churn_summary = churn_df.groupby([school_col, '학교명', '총판', '본사담당자(2025.09)']).agg({
-            '부수': 'sum',
-            '금액': 'sum',
-            '과목명': lambda x: ', '.join(x.unique())
-        }).reset_index()
+        # 그룹화에 사용할 컬럼이 실제로 존재하는지 확인하여 KeyError 방지
+        group_cols = [school_col]
+        for c in ['학교명', '총판', '본사담당자(2025.09)']:
+            if c in churn_df.columns:
+                group_cols.append(c)
+
+        # aggregate dict 초기화 (값으로 함수도 넣을 수 있도록 빈 dict로 생성)
+        agg_dict = {}
+        agg_dict['부수'] = 'sum'
+        if '금액' in churn_df.columns:
+            agg_dict['금액'] = 'sum'
+        # 과목명은 존재하면 고유값 조합으로 처리
+        if '과목명' in churn_df.columns:
+            agg_dict['과목명'] = lambda x: ', '.join(x.dropna().unique())
+
+        churn_summary = churn_df.groupby(group_cols).agg(agg_dict).reset_index()
         
         churn_summary = churn_summary.sort_values('부수', ascending=False)
         
