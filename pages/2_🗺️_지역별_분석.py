@@ -209,11 +209,24 @@ def classify_region_direction(region_name):
     
     return '미분류'
 
-# Add region classification to dataframes
-if '시도교육청' in total_df.columns:
-    total_df['지역구분'] = total_df['시도교육청'].apply(classify_region_direction)
+# Add region classification to dataframes (support both '시도교육청' and '시도명')
+region_col_order = None
 if '시도교육청' in order_df.columns:
-    order_df['지역구분'] = order_df['시도교육청'].apply(classify_region_direction)
+    region_col_order = '시도교육청'
+elif '시도명' in order_df.columns:
+    region_col_order = '시도명'
+
+if region_col_order:
+    order_df['지역구분'] = order_df[region_col_order].apply(classify_region_direction)
+
+region_col_total = None
+if '시도교육청' in total_df.columns:
+    region_col_total = '시도교육청'
+elif '시도명' in total_df.columns:
+    region_col_total = '시도명'
+
+if region_col_total:
+    total_df['지역구분'] = total_df[region_col_total].apply(classify_region_direction)
 
 # Sidebar Filters
 st.sidebar.header("🔍 필터 옵션")
