@@ -129,8 +129,10 @@ def show_region_detail(region_name):
     
     with detail_tab2:
         st.subheader("과목별 주문 현황")
-        if '과목명' in region_orders.columns:
-            subject_orders = region_orders.groupby('과목명').agg({
+        # 과목명 컬럼: 교과서명_구분 우선 사용 (학교급 태그 포함)
+        subject_col = '교과서명_구분' if '교과서명_구분' in region_orders.columns else '과목명'
+        if subject_col in region_orders.columns:
+            subject_orders = region_orders.groupby(subject_col).agg({
                 '부수': 'sum',
                 school_col: 'nunique'
             }).reset_index()
@@ -284,13 +286,14 @@ if '학교급코드' in filtered_total_df.columns:
         selected_code = [k for k, v in school_level_names.items() if v == selected_school][0]
         filtered_total_df = filtered_total_df[filtered_total_df['학교급코드'] == selected_code].copy()
     
-# Subject Filter
-if '과목명' in filtered_order_df.columns:
-    subjects = ['전체'] + sorted(filtered_order_df['과목명'].dropna().unique().tolist())
+# Subject Filter  
+subject_col_filter = '교과서명_구분' if '교과서명_구분' in filtered_order_df.columns else '과목명'
+if subject_col_filter in filtered_order_df.columns:
+    subjects = ['전체'] + sorted(filtered_order_df[subject_col_filter].dropna().unique().tolist())
     selected_subject = st.sidebar.selectbox("과목 선택", subjects)
     
     if selected_subject != '전체':
-        filtered_order_df = filtered_order_df[filtered_order_df['과목명'] == selected_subject].copy()
+        filtered_order_df = filtered_order_df[filtered_order_df[subject_col_filter] == selected_subject].copy()
 
 st.sidebar.markdown("---")
 st.sidebar.info(f"📊 필터링된 학생: {filtered_total_df['학생수(계)'].sum():,.0f}명")

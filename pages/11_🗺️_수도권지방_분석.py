@@ -438,16 +438,17 @@ if region_col_total:
     with tab5:
         st.subheader("📚 과목별 분석")
         
-        if '과목명' in order_df.columns:
+        subject_col = '교과서명_구분' if '교과서명_구분' in order_df.columns else '과목명'
+        if subject_col in order_df.columns:
             # 수도권 vs 지방 과목 비교
             subject_comparison = []
             
             # 상위 15개 과목 선정
-            top_subjects = order_df.groupby('과목명')['부수'].sum().nlargest(15).index
+            top_subjects = order_df.groupby(subject_col)['부수'].sum().nlargest(15).index
             
             for subject in top_subjects:
-                metro_subj = metro_order[metro_order['과목명'] == subject]
-                local_subj = local_order[local_order['과목명'] == subject]
+                metro_subj = metro_order[metro_order[subject_col] == subject]
+                local_subj = local_order[local_order[subject_col] == subject]
                 
                 subject_comparison.append({
                     '과목명': subject,

@@ -52,7 +52,7 @@ if missing:
     st.error(f"필수 컬럼이 없습니다: {missing}")
     st.stop()
 
-# 과목 컬럼 확인
+# 과목 컬럼 확인 - 교과서명_구분 우선 사용 (학교급 태그 포함)
 subject_col = '교과서명_구분' if '교과서명_구분' in order_df_full.columns else ('과목명' if '과목명' in order_df_full.columns else None)
 if subject_col is None:
     st.warning("과목 정보 컬럼이 없습니다.")

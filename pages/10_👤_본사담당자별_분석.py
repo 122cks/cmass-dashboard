@@ -989,7 +989,11 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             key='subject_manager_select'
         )
         
-        if '과목명' in filtered_order.columns:
+        # 과목명 표시: 교과서명_구분 우선 사용 (이미 [고등]/[중등] 태그 포함)
+        if '교과서명_구분' in filtered_order.columns:
+            filtered_order_copy = filtered_order.copy()
+            filtered_order_copy['과목명_표시'] = filtered_order_copy['교과서명_구분']
+        elif '과목명' in filtered_order.columns:
             # 학교급 정보를 과목명에 추가
             if '학교급' in filtered_order.columns:
                 filtered_order_copy = filtered_order.copy()
@@ -1026,6 +1030,9 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             else:
                 filtered_order_copy = filtered_order.copy()
                 filtered_order_copy['과목명_표시'] = filtered_order_copy['과목명']
+        else:
+            filtered_order_copy = filtered_order.copy()
+            filtered_order_copy['과목명_표시'] = ''
             
             # 과목별 점유율(담당자 전체 학생수 대비 주문부수) 분석
             subject_analysis = []

@@ -69,8 +69,9 @@ def show_distributor_detail(dist_name):
     
     with detail_tab1:
         st.subheader("과목별 주문 현황")
-        if '과목명' in dist_orders.columns:
-            subject_orders = dist_orders.groupby('과목명').agg({
+        subject_col = '교과서명_구분' if '교과서명_구분' in dist_orders.columns else '과목명'
+        if subject_col in dist_orders.columns:
+            subject_orders = dist_orders.groupby(subject_col).agg({
                 '부수': 'sum',
                 school_col: 'nunique'
             }).reset_index()

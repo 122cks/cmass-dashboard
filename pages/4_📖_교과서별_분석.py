@@ -67,12 +67,13 @@ else:
     filtered_df = order_df.copy()
 
 # Subject Filter
-if '과목명' in filtered_df.columns:
-    subjects = ['전체'] + sorted(filtered_df['과목명'].dropna().unique().tolist())
+subject_col_filter = '교과서명_구분' if '교과서명_구분' in filtered_df.columns else '과목명'
+if subject_col_filter in filtered_df.columns:
+    subjects = ['전체'] + sorted(filtered_df[subject_col_filter].dropna().unique().tolist())
     selected_subject = st.sidebar.selectbox("과목 선택", subjects)
     
     if selected_subject != '전체':
-        filtered_df = filtered_df[filtered_df['과목명'] == selected_subject]
+        filtered_df = filtered_df[filtered_df[subject_col_filter] == selected_subject]
 
 # Region Filter
 if '시도교육청' in filtered_df.columns:

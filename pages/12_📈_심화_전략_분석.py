@@ -309,12 +309,13 @@ with tab4:
     st.header("🔗 과목 간 연계 판매 분석 (Cross-sell)")
     st.markdown("특정 과목을 구매한 학교가 다른 과목도 구매했는지 분석합니다.")
     
-    if '과목명' in order_df.columns:
+    subject_col = '교과서명_구분' if '교과서명_구분' in order_df.columns else '과목명'
+    if subject_col in order_df.columns:
         # 학교별 구매 과목 리스트 생성
-        school_subjects = df_2026.groupby(school_col)['과목명'].unique().apply(list)
+        school_subjects = df_2026.groupby(school_col)[subject_col].unique().apply(list)
         
         # 과목 목록
-        all_subjects = sorted(df_2026['과목명'].unique())
+        all_subjects = sorted(df_2026[subject_col].unique())
         
         # Co-occurrence Matrix 생성
         co_occurrence = pd.DataFrame(0, index=all_subjects, columns=all_subjects)
@@ -373,9 +374,10 @@ with tab5:
         st.success(f"🏙️ **지역 강세**: **{top_region}** 지역에서의 주문이 전체의 **{pct:.1f}%**를 차지하고 있습니다.")
     
     # 4. 과목 트렌드
-    if '과목명' in df_2026.columns and not df_2026.empty:
+    subject_col = '교과서명_구분' if '교과서명_구분' in df_2026.columns else '과목명'
+    if subject_col in df_2026.columns and not df_2026.empty:
         try:
-            top_subject = df_2026.groupby('과목명')['부수'].sum().idxmax()
+            top_subject = df_2026.groupby(subject_col)['부수'].sum().idxmax()
             st.info(f"📚 **베스트셀러**: **{top_subject}** 과목이 올해 가장 많은 사랑을 받았습니다.")
         except Exception:
             st.info("📚 과목별 데이터를 계산할 수 없습니다.")
