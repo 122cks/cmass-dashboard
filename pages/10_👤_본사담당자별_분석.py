@@ -43,14 +43,25 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             right_on='정보공시 학교코드',
             how='left'
         )
-        # 주문 데이터에 학교급 정보가 없으면 total_df에서 병합하여 추가
-        if '학교급' not in order_df.columns and '정보공시 학교코드' in total_df.columns and '학교급' in total_df.columns:
-            school_level_map = total_df[['정보공시 학교코드', '학교급']].drop_duplicates()
+    
+    # 주문 데이터에 학교급 정보 추가 (product_df에서 도서코드로 병합 - 1번 페이지 방식)
+    if '학교급' not in order_df.columns and not product_df.empty and '학교급' in product_df.columns and '코드' in product_df.columns:
+        book_code_col = None
+        for col in ['도서코드(교지명구분)', '도서코드', '과목코드']:
+            if col in order_df.columns:
+                book_code_col = col
+                break
+        
+        if book_code_col:
+            product_merge = product_df[['코드', '학교급']].drop_duplicates().copy()
+            product_merge['코드'] = product_merge['코드'].astype(str)
+            order_df[book_code_col] = order_df[book_code_col].astype(str)
+            
             order_df = pd.merge(
                 order_df,
-                school_level_map,
-                left_on=school_code_col,
-                right_on='정보공시 학교코드',
+                product_merge,
+                left_on=book_code_col,
+                right_on='코드',
                 how='left'
             )
     
@@ -972,6 +983,31 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             if '학교급' in filtered_order.columns:
                 filtered_order_copy = filtered_order.copy()
                 # 학교급 단축명 매핑
+                # 학교급 값 정규화: 다양한 표기('고등','고') 등을 통일
+                def _normalize_level(v):
+                    try:
+                        if pd.isna(v):
+                            return np.nan
+                        s = str(v)
+                        if '고등' in s:
+                            return '고등학교'
+                        if '중등' in s or '중학교' in s:
+                            return '중학교'
+                        if '초등' in s or '초등학교' in s:
+                            return '초등학교'
+                        # 약식 표기 대응
+                        if '고' in s and '중' not in s and '초' not in s:
+                            return '고등학교'
+                        if '중' in s and '초' not in s:
+                            return '중학교'
+                        if '초' in s:
+                            return '초등학교'
+                    except Exception:
+                        return np.nan
+                    return np.nan
+
+                filtered_order_copy['학교급'] = filtered_order_copy.get('학교급', pd.Series([np.nan]*len(filtered_order_copy)))
+                filtered_order_copy['학교급'] = filtered_order_copy['학교급'].apply(_normalize_level)
                 level_map = {'초등학교': '[초등]', '중학교': '[중등]', '고등학교': '[고등]'}
                 filtered_order_copy['학교급_단축'] = filtered_order_copy['학교급'].map(level_map).fillna('')
                 filtered_order_copy['과목명_표시'] = filtered_order_copy['학교급_단축'].astype(str) + ' ' + filtered_order_copy['과목명'].astype(str)
