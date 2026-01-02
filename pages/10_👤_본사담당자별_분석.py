@@ -448,6 +448,8 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
                     region_total_schools = region_total['정보공시 학교코드'].nunique()
                     
                     # 점유율 계산
+                    # - 학교점유율: 담당학교수 대비 채택학교수
+                    # - 학생수대비주문율: 담당학생수(시장규모) 대비 주문부수 (상대비교 핵심)
                     school_share = (region_schools / region_total_schools * 100) if region_total_schools > 0 else 0
                     student_share = (region_orders / region_students * 100) if region_students > 0 else 0
                     
@@ -474,28 +476,28 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
                 
                 with col1:
                     st.markdown("##### 🔴 점유율 낮은 지역 TOP 5")
-                    low_metro = metro_df.nsmallest(5, '학교점유율(%)')[['담당자', '지역', '학교점유율(%)', '학생대비주문율(%)', '채택학교수', '담당학교수']]
+                    low_metro = metro_df[metro_df['담당학생수'] > 0].nsmallest(5, '학생대비주문율(%)')[['담당자', '지역', '학생대비주문율(%)', '주문부수', '담당학생수', '학교점유율(%)']]
                     st.dataframe(
                         low_metro.style.format({
-                            '학교점유율(%)': '{:.1f}',
                             '학생대비주문율(%)': '{:.2f}',
-                            '채택학교수': '{:,.0f}',
-                            '담당학교수': '{:,.0f}'
-                        }).background_gradient(subset=['학교점유율(%)'], cmap='Reds_r'),
+                            '주문부수': '{:,.0f}',
+                            '담당학생수': '{:,.0f}',
+                            '학교점유율(%)': '{:.1f}'
+                        }).background_gradient(subset=['학생대비주문율(%)'], cmap='Reds_r'),
                         use_container_width=True
                     )
                     st.caption("⚠️ 집중 영업 필요 지역")
                 
                 with col2:
                     st.markdown("##### 🟢 점유율 높은 지역 TOP 5")
-                    high_metro = metro_df.nlargest(5, '학교점유율(%)')[['담당자', '지역', '학교점유율(%)', '학생대비주문율(%)', '채택학교수', '담당학교수']]
+                    high_metro = metro_df[metro_df['담당학생수'] > 0].nlargest(5, '학생대비주문율(%)')[['담당자', '지역', '학생대비주문율(%)', '주문부수', '담당학생수', '학교점유율(%)']]
                     st.dataframe(
                         high_metro.style.format({
-                            '학교점유율(%)': '{:.1f}',
                             '학생대비주문율(%)': '{:.2f}',
-                            '채택학교수': '{:,.0f}',
-                            '담당학교수': '{:,.0f}'
-                        }).background_gradient(subset=['학교점유율(%)'], cmap='Greens'),
+                            '주문부수': '{:,.0f}',
+                            '담당학생수': '{:,.0f}',
+                            '학교점유율(%)': '{:.1f}'
+                        }).background_gradient(subset=['학생대비주문율(%)'], cmap='Greens'),
                         use_container_width=True
                     )
                     st.caption("✅ 강점 지역 - 성공 전략 벤치마킹")
@@ -507,22 +509,55 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             pivot_region = region_df.pivot_table(
                 index='담당자',
                 columns='지역',
-                values='학교점유율(%)',
+                values='학생대비주문율(%)',
                 aggfunc='mean'
             ).fillna(0)
             
             fig_heatmap = px.imshow(
                 pivot_region,
-                labels=dict(x="지역", y="담당자", color="학교점유율(%)"),
+                labels=dict(x="지역", y="담당자", color="학생대비주문율(%)"),
                 x=pivot_region.columns,
                 y=pivot_region.index,
                 color_continuous_scale='RdYlGn',
                 aspect='auto',
-                title="담당자별 지역 학교 점유율 히트맵"
+                title="담당자별 지역 점유율 히트맵 (학생수 대비 주문부수)"
             )
             fig_heatmap.update_layout(height=400)
             st.plotly_chart(fig_heatmap, use_container_width=True)
-            st.caption("💡 진한 녹색: 높은 점유율 | 진한 빨강: 낮은 점유율 (집중 영업 필요)")
+            st.caption("💡 진한 녹색: 학생수 대비 주문부수 높음 | 진한 빨강: 낮음")
+
+            # 담당자별 '잘한/못한' 지역(학생수 대비 주문부수 기준)
+            st.markdown("---")
+            st.markdown("#### 🧭 담당자별 강점/약점 지역 (점유율=주문부수÷학생수)")
+            for manager in selected_managers:
+                mgr_region = region_df[(region_df['담당자'] == manager) & (region_df['담당학생수'] > 0)].copy()
+                if mgr_region.empty:
+                    continue
+
+                with st.expander(f"🗺️ {manager} - 잘한/못한 지역 (점유율)", expanded=False):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown("##### 🟢 잘한 지역 TOP 5")
+                        top5 = mgr_region.nlargest(5, '학생대비주문율(%)')[['지역', '학생대비주문율(%)', '주문부수', '담당학생수']]
+                        st.dataframe(
+                            top5.style.format({
+                                '학생대비주문율(%)': '{:.2f}',
+                                '주문부수': '{:,.0f}',
+                                '담당학생수': '{:,.0f}'
+                            }).background_gradient(subset=['학생대비주문율(%)'], cmap='Greens'),
+                            use_container_width=True
+                        )
+                    with c2:
+                        st.markdown("##### 🔴 못한 지역 TOP 5")
+                        bottom5 = mgr_region.nsmallest(5, '학생대비주문율(%)')[['지역', '학생대비주문율(%)', '주문부수', '담당학생수']]
+                        st.dataframe(
+                            bottom5.style.format({
+                                '학생대비주문율(%)': '{:.2f}',
+                                '주문부수': '{:,.0f}',
+                                '담당학생수': '{:,.0f}'
+                            }).background_gradient(subset=['학생대비주문율(%)'], cmap='Reds_r'),
+                            use_container_width=True
+                        )
         
         # 담당자별 시도 분포 (기존 코드)
         st.markdown("---")
@@ -581,32 +616,44 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
         st.subheader("📚 과목별 인사이트 (담당자별 강점/약점 과목)")
         
         if '과목명' in filtered_order.columns:
-            # 전체 과목별 점유율 분석
+            # 과목별 점유율(담당자 전체 학생수 대비 주문부수) 분석
             subject_analysis = []
-            
+
             for manager in selected_managers:
+                mgr_total = filtered_total[filtered_total['본사담당자(2025.09)'] == manager]
                 mgr_order = filtered_order[filtered_order['본사담당자(2025.09)'] == manager]
-                
-                for subject in mgr_order['과목명'].unique():
+
+                # 담당자의 전체 담당학생수
+                total_students = mgr_total['학생수(계)'].sum() if '학생수(계)' in mgr_total.columns else 0
+
+                order_school_key = '정보공시 학교코드' if '정보공시 학교코드' in mgr_order.columns else school_code_col
+
+                for subject in mgr_order['과목명'].dropna().unique():
                     subj_data = mgr_order[mgr_order['과목명'] == subject]
-                    subject_orders = subj_data['부수'].sum()
-                    subject_schools = subj_data[school_code_col].nunique() if school_code_col in subj_data.columns else 0
-                    
+                    subject_orders = subj_data['부수'].sum() if '부수' in subj_data.columns else 0
+                    subject_schools = subj_data[order_school_key].nunique() if order_school_key in subj_data.columns else 0
+
+                    # 점유율(%) = (과목별 주문부수 / 담당자 전체 학생수) * 100
+                    subject_share = (subject_orders / total_students * 100) if total_students and total_students > 0 else 0
+
                     subject_analysis.append({
                         '담당자': manager,
                         '과목명': subject,
                         '주문부수': subject_orders,
-                        '학교수': subject_schools
+                        '학교수': subject_schools,
+                        '담당학생수': total_students,
+                        '학생수대비점유율(%)': subject_share
                     })
             
             subject_df = pd.DataFrame(subject_analysis)
             
-            # 전체 과목별 평균 계산
-            subject_avg = subject_df.groupby('과목명')['주문부수'].mean().reset_index()
-            subject_avg.columns = ['과목명', '평균주문부수']
-            
+            # 전체 과목별 평균(점유율 기준) 계산
+            subject_avg = subject_df.groupby('과목명')['학생수대비점유율(%)'].mean().reset_index()
+            subject_avg.columns = ['과목명', '평균점유율(%)']
+
             subject_df = subject_df.merge(subject_avg, on='과목명', how='left')
-            subject_df['평균대비(%)'] = ((subject_df['주문부수'] - subject_df['평균주문부수']) / subject_df['평균주문부수'] * 100).round(1)
+            base = subject_df['평균점유율(%)'].replace(0, np.nan)
+            subject_df['평균대비(%)'] = ((subject_df['학생수대비점유율(%)'] - subject_df['평균점유율(%)']) / base * 100).round(1).fillna(0)
             
             # 주요 과목 (전체 주문 기준 TOP 10)
             top_subjects = subject_df.groupby('과목명')['주문부수'].sum().nlargest(10).index
@@ -618,10 +665,12 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             
             with col1:
                 st.markdown("##### 🔴 과목별 점유율 낮은 케이스 TOP 10")
-                low_subject = top_subject_df.nsmallest(10, '주문부수')[['담당자', '과목명', '주문부수', '평균대비(%)', '학교수']]
+                low_subject = top_subject_df[top_subject_df['담당학생수'] > 0].nsmallest(10, '학생수대비점유율(%)')[['담당자', '과목명', '학생수대비점유율(%)', '주문부수', '담당학생수', '평균대비(%)']]
                 st.dataframe(
                     low_subject.style.format({
+                        '학생수대비점유율(%)': '{:.2f}',
                         '주문부수': '{:,.0f}',
+                        '담당학생수': '{:,.0f}',
                         '평균대비(%)': '{:+.1f}',
                         '학교수': '{:,.0f}'
                     }).background_gradient(subset=['평균대비(%)'], cmap='Reds_r'),
@@ -631,20 +680,54 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             
             with col2:
                 st.markdown("##### 🟢 과목별 점유율 높은 케이스 TOP 10")
-                high_subject = top_subject_df.nlargest(10, '주문부수')[['담당자', '과목명', '주문부수', '평균대비(%)', '학교수']]
+                high_subject = top_subject_df[top_subject_df['담당학생수'] > 0].nlargest(10, '학생수대비점유율(%)')[['담당자', '과목명', '학생수대비점유율(%)', '주문부수', '담당학생수', '평균대비(%)']]
                 st.dataframe(
                     high_subject.style.format({
+                        '학생수대비점유율(%)': '{:.2f}',
                         '주문부수': '{:,.0f}',
+                        '담당학생수': '{:,.0f}',
                         '평균대비(%)': '{:+.1f}',
                         '학교수': '{:,.0f}'
                     }).background_gradient(subset=['평균대비(%)'], cmap='Greens'),
                     use_container_width=True
                 )
                 st.caption("✅ 강점 과목 - 노하우 공유 필요")
+
+            # 담당자별 '잘한/못한' 과목 (점유율 기준)
+            st.markdown("---")
+            st.markdown("#### 🧠 담당자별 강점/약점 과목 (점유율=주문부수÷담당학생수)")
+            for manager in selected_managers:
+                mgr_subject = subject_df[(subject_df['담당자'] == manager) & (subject_df['담당학생수'] > 0)].copy()
+                if mgr_subject.empty:
+                    continue
+                with st.expander(f"📚 {manager} - 잘한/못한 과목 (점유율)", expanded=False):
+                    c1, c2 = st.columns(2)
+                    with c1:
+                        st.markdown("##### 🟢 잘한 과목 TOP 5")
+                        top5 = mgr_subject.nlargest(5, '학생수대비점유율(%)')[['과목명', '학생수대비점유율(%)', '주문부수', '담당학생수']]
+                        st.dataframe(
+                            top5.style.format({
+                                '학생수대비점유율(%)': '{:.2f}',
+                                '주문부수': '{:,.0f}',
+                                '담당학생수': '{:,.0f}'
+                            }).background_gradient(subset=['학생수대비점유율(%)'], cmap='Greens'),
+                            use_container_width=True
+                        )
+                    with c2:
+                        st.markdown("##### 🔴 못한 과목 TOP 5")
+                        bottom5 = mgr_subject.nsmallest(5, '학생수대비점유율(%)')[['과목명', '학생수대비점유율(%)', '주문부수', '담당학생수']]
+                        st.dataframe(
+                            bottom5.style.format({
+                                '학생수대비점유율(%)': '{:.2f}',
+                                '주문부수': '{:,.0f}',
+                                '담당학생수': '{:,.0f}'
+                            }).background_gradient(subset=['학생수대비점유율(%)'], cmap='Reds_r'),
+                            use_container_width=True
+                        )
             
             # 담당자별 과목 점유율 히트맵
             st.markdown("---")
-            st.markdown("#### 📊 담당자 × 과목 주문부수 히트맵 (TOP 15 과목)")
+            st.markdown("#### 📊 담당자 × 과목 점유율 히트맵 (TOP 15 과목, 담당학생수 대비 주문부수)")
             
             top15_subjects = subject_df.groupby('과목명')['주문부수'].sum().nlargest(15).index
             top15_df = subject_df[subject_df['과목명'].isin(top15_subjects)]
@@ -652,22 +735,22 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             pivot_subject = top15_df.pivot_table(
                 index='담당자',
                 columns='과목명',
-                values='주문부수',
+                values='학생수대비점유율(%)',
                 aggfunc='sum'
             ).fillna(0)
             
             fig_subject_heatmap = px.imshow(
                 pivot_subject,
-                labels=dict(x="과목명", y="담당자", color="주문부수"),
+                labels=dict(x="과목명", y="담당자", color="점유율(%)"),
                 x=pivot_subject.columns,
                 y=pivot_subject.index,
                 color_continuous_scale='YlOrRd',
                 aspect='auto',
-                title="담당자별 과목 주문부수 히트맵"
+                title="담당자별 과목 점유율(담당학생수 대비 주문부수) 히트맵"
             )
             fig_subject_heatmap.update_layout(height=400, xaxis_tickangle=-45)
             st.plotly_chart(fig_subject_heatmap, use_container_width=True)
-            st.caption("💡 진한 색: 높은 주문부수 | 옅은 색: 낮은 주문부수")
+            st.caption("💡 진한 색: 점유율 높음 (담당학생수 대비 주문부수) | 옅은 색: 낮음")
             
             # 담당자별 Top 과목 (기존 코드)
             st.markdown("---")
