@@ -616,20 +616,32 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
         st.subheader("📚 과목별 인사이트 (담당자별 강점/약점 과목)")
         
         if '과목명' in filtered_order.columns:
+            # 학교급 정보를 과목명에 추가
+            if '학교급' in filtered_order.columns:
+                filtered_order_copy = filtered_order.copy()
+                # 학교급 단축명 매핑
+                level_map = {'초등학교': '[초등]', '중학교': '[중등]', '고등학교': '[고등]'}
+                filtered_order_copy['학교급_단축'] = filtered_order_copy['학교급'].map(level_map).fillna('')
+                filtered_order_copy['과목명_표시'] = filtered_order_copy['학교급_단축'].astype(str) + ' ' + filtered_order_copy['과목명'].astype(str)
+                filtered_order_copy['과목명_표시'] = filtered_order_copy['과목명_표시'].str.strip()
+            else:
+                filtered_order_copy = filtered_order.copy()
+                filtered_order_copy['과목명_표시'] = filtered_order_copy['과목명']
+            
             # 과목별 점유율(담당자 전체 학생수 대비 주문부수) 분석
             subject_analysis = []
 
             for manager in selected_managers:
                 mgr_total = filtered_total[filtered_total['본사담당자(2025.09)'] == manager]
-                mgr_order = filtered_order[filtered_order['본사담당자(2025.09)'] == manager]
+                mgr_order = filtered_order_copy[filtered_order_copy['본사담당자(2025.09)'] == manager]
 
                 # 담당자의 전체 담당학생수
                 total_students = mgr_total['학생수(계)'].sum() if '학생수(계)' in mgr_total.columns else 0
 
                 order_school_key = '정보공시 학교코드' if '정보공시 학교코드' in mgr_order.columns else school_code_col
 
-                for subject in mgr_order['과목명'].dropna().unique():
-                    subj_data = mgr_order[mgr_order['과목명'] == subject]
+                for subject in mgr_order['과목명_표시'].dropna().unique():
+                    subj_data = mgr_order[mgr_order['과목명_표시'] == subject]
                     subject_orders = subj_data['부수'].sum() if '부수' in subj_data.columns else 0
                     subject_schools = subj_data[order_school_key].nunique() if order_school_key in subj_data.columns else 0
 
@@ -757,9 +769,9 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
             st.markdown("#### 📖 담당자별 과목 주문 현황")
             for manager in selected_managers:
                 with st.expander(f"📖 {manager} - 과목별 주문 현황", expanded=True):
-                    mgr_order = filtered_order[filtered_order['본사담당자(2025.09)'] == manager]
+                    mgr_order = filtered_order_copy[filtered_order_copy['본사담당자(2025.09)'] == manager]
                     
-                    subject_summary = mgr_order.groupby('과목명').agg({
+                    subject_summary = mgr_order.groupby('과목명_표시').agg({
                         '부수': 'sum',
                         school_code_col: 'nunique' if school_code_col in mgr_order.columns else lambda x: 0
                     }).reset_index()
@@ -797,13 +809,13 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
         
         if '과목명' in filtered_order.columns:
             # 상위 10개 과목 선정
-            top_subjects = filtered_order.groupby('과목명')['부수'].sum().nlargest(10).index
+            top_subjects = filtered_order_copy.groupby('과목명_표시')['부수'].sum().nlargest(10).index
             
             comparison_data = []
             for manager in selected_managers:
-                mgr_order = filtered_order[filtered_order['본사담당자(2025.09)'] == manager]
+                mgr_order = filtered_order_copy[filtered_order_copy['본사담당자(2025.09)'] == manager]
                 for subject in top_subjects:
-                    subj_data = mgr_order[mgr_order['과목명'] == subject]
+                    subj_data = mgr_order[mgr_order['과목명_표시'] == subject]
                     comparison_data.append({
                         '담당자': manager,
                         '과목명': subject,
