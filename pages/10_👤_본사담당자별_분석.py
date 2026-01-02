@@ -5,6 +5,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
+import uuid
 from utils.year_filter import add_year_filter_sidebar, filter_by_years, create_year_comparison_metrics
 
 st.set_page_config(page_title="본사담당자별 분석", page_icon="👤", layout="wide")
@@ -1530,7 +1531,7 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
                 title="담당자별 과목 점유율(담당학생수 대비 주문부수) 히트맵"
             )
             fig_subject_heatmap.update_layout(height=400, xaxis_tickangle=-45)
-            st.plotly_chart(fig_subject_heatmap, use_container_width=True)
+            st.plotly_chart(fig_subject_heatmap, use_container_width=True, key=f"subject_heatmap_{uuid.uuid4()}")
             st.caption("💡 진한 색: 점유율 높음 (담당학생수 대비 주문부수) | 옅은 색: 낮음")
             
             # 담당자별 Top 과목 (기존 코드)
