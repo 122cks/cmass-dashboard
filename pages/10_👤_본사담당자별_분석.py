@@ -6,6 +6,16 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
 import uuid
+import uuid
+
+# Ensure each plotly_chart call gets a unique key to avoid StreamlitDuplicateElementId
+_st_plotly_chart_orig = st.plotly_chart
+def _st_plotly_chart_unique(fig, *args, **kwargs):
+    if 'key' not in kwargs:
+        kwargs['key'] = f"plot_{uuid.uuid4()}"
+    return _st_plotly_chart_orig(fig, *args, **kwargs)
+# Monkeypatch st.plotly_chart for this page
+st.plotly_chart = _st_plotly_chart_unique
 from utils.year_filter import add_year_filter_sidebar, filter_by_years, create_year_comparison_metrics
 
 st.set_page_config(page_title="본사담당자별 분석", page_icon="👤", layout="wide")
