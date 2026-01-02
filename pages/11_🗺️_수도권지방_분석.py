@@ -33,16 +33,29 @@ st.markdown("---")
 # 수도권 정의: 서울, 인천, 경기
 METROPOLITAN_AREAS = ['서울특별시', '인천광역시', '경기도']
 
-# 시도명으로 수도권/지방 구분
+# 시도명 또는 시도교육청 컬럼으로 수도권/지방 구분 (양쪽 모두 대응)
+region_col_order = None
 if '시도명' in order_df.columns:
-    order_df['지역구분'] = order_df['시도명'].apply(
+    region_col_order = '시도명'
+elif '시도교육청' in order_df.columns:
+    region_col_order = '시도교육청'
+
+if region_col_order:
+    order_df['지역구분'] = order_df[region_col_order].apply(
         lambda x: '수도권' if any(area in str(x) for area in METROPOLITAN_AREAS) else '지방'
     )
-    
-    if '시도명' in total_df.columns:
-        total_df['지역구분'] = total_df['시도명'].apply(
-            lambda x: '수도권' if any(area in str(x) for area in METROPOLITAN_AREAS) else '지방'
-        )
+
+# total_df may use a different column name; prefer '시도명' then '시도교육청'
+region_col_total = None
+if '시도명' in total_df.columns:
+    region_col_total = '시도명'
+elif '시도교육청' in total_df.columns:
+    region_col_total = '시도교육청'
+
+if region_col_total:
+    total_df['지역구분'] = total_df[region_col_total].apply(
+        lambda x: '수도권' if any(area in str(x) for area in METROPOLITAN_AREAS) else '지방'
+    )
     
     # Sidebar - 지역 선택
     st.sidebar.header("🔍 지역 선택")
