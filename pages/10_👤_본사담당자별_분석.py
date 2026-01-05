@@ -612,15 +612,17 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
                     manager_data = region_share_df[region_share_df['담당자'] == manager].copy()
                     manager_data = manager_data.sort_values('학생수점유율(%)', ascending=False)
                     
-                    # 부수(점유율) 문자열 생성
+                    # 부수(점유율) 문자열 생성 및 원시 주문부수 컬럼 추가
                     manager_data['부수(점유율)'] = manager_data.apply(lambda r: f"{int(r.get('주문부수',0)):,} ({r.get('주문부수점유율(%)',0):.2f}%)", axis=1)
+                    manager_data['주문부수'] = manager_data['주문부수'].fillna(0).astype(float)
 
                     # 지역 컬럼을 제외한 데이터프레임 생성 (담당자 이름도 제거)
-                    display_cols = ['지역', '부수(점유율)', '학교점유율(%)', '학생수점유율(%)', '채택학교수', '담당학교수', '채택학교학생수', '담당학생수']
+                    display_cols = ['지역', '주문부수', '부수(점유율)', '학교점유율(%)', '학생수점유율(%)', '채택학교수', '담당학교수', '채택학교학생수', '담당학생수']
                     display_data = manager_data[display_cols]
 
                     st.dataframe(
                         display_data.style.format({
+                            '주문부수': '{:,.0f}',
                             '학교점유율(%)': '{:.1f}',
                             '학생수점유율(%)': '{:.2f}',
                             '채택학교수': '{:,.0f}',
