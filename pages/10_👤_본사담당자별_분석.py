@@ -529,6 +529,23 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
         if filter_applied:
             st.info(f"🔍 적용된 필터: {', '.join(filter_applied)}")
         
+        # 선택된 과목의 학교급 추정 (있으면 지역별 학생수 계산에 사용)
+        subject_level = None
+        if selected_subject and selected_subject != '전체':
+            try:
+                if subject_name_col in filtered_order.columns:
+                    subj_rows = filtered_order[filtered_order[subject_name_col] == selected_subject]
+                    if '학교급' in subj_rows.columns and not subj_rows.empty:
+                        m = subj_rows['학교급'].mode()
+                        subject_level = m.iloc[0] if len(m) > 0 else None
+                if subject_level is None and not product_df.empty and '교과서명' in product_df.columns:
+                    prod_rows = product_df[product_df['교과서명'] == selected_subject]
+                    if '학교급' in prod_rows.columns and not prod_rows.empty:
+                        m = prod_rows['학교급'].mode()
+                        subject_level = m.iloc[0] if len(m) > 0 else None
+            except Exception:
+                subject_level = None
+
         # 송훈재, 임준호, 조영환 3명의 지역별 점유율 테이블
         st.markdown("### 📊 송훈재, 임준호, 조영환 지역별 점유율")
         
@@ -694,8 +711,11 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
                     region_total = mgr_total[mgr_total['시도명'] == region]
                     region_order = mgr_order[mgr_order['시도명'] == region]
                     
-                    # 해당 지역의 담당 학생수
-                    region_students = region_total['학생수(계)'].sum() if '학생수(계)' in region_total.columns else 0
+                    # 해당 지역의 담당 학생수 (선택 과목의 학교급으로 필터링하여 계산)
+                    if subject_level is not None and '학교급' in region_total.columns:
+                        region_students = region_total[region_total['학교급'] == subject_level]['학생수(계)'].sum() if '학생수(계)' in region_total.columns else 0
+                    else:
+                        region_students = region_total['학생수(계)'].sum() if '학생수(계)' in region_total.columns else 0
                     # 해당 지역의 주문부수
                     region_orders = region_order['부수'].sum() if '부수' in region_order.columns else 0
                     # 해당 지역의 채택학교수
