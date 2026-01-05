@@ -562,11 +562,17 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
                     
                     # 담당 학생수
                     region_students = region_total['학생수(계)'].sum() if '학생수(계)' in region_total.columns else 0
-                    
+
+                    # 해당 지역의 주문부수
+                    region_orders = region_order['부수'].sum() if '부수' in region_order.columns else 0
+
                     # 점유율 계산
                     school_share = (region_schools / region_total_schools * 100) if region_total_schools > 0 else 0
                     student_share = (ordered_schools_students / region_students * 100) if region_students > 0 else 0
-                    
+
+                    # 주문부수 기반 점유율 (학생수 대비 주문부수 비율)
+                    order_share = (region_orders / region_students * 100) if region_students > 0 else 0
+
                     region_share_data.append({
                         '담당자': manager,
                         '지역': region,
@@ -575,7 +581,9 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
                         '학교점유율(%)': school_share,
                         '채택학교학생수': ordered_schools_students,
                         '담당학생수': region_students,
-                        '학생수점유율(%)': student_share
+                        '학생수점유율(%)': student_share,
+                        '주문부수': region_orders,
+                        '주문부수점유율(%)': order_share
                     })
             
             region_share_df = pd.DataFrame(region_share_data)
@@ -587,10 +595,13 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
                     manager_data = region_share_df[region_share_df['담당자'] == manager].copy()
                     manager_data = manager_data.sort_values('학생수점유율(%)', ascending=False)
                     
+                    # 부수(점유율) 문자열 생성
+                    manager_data['부수(점유율)'] = manager_data.apply(lambda r: f"{int(r.get('주문부수',0)):,} ({r.get('주문부수점유율(%)',0):.2f}%)", axis=1)
+
                     # 지역 컬럼을 제외한 데이터프레임 생성 (담당자 이름도 제거)
-                    display_cols = ['지역', '학교점유율(%)', '학생수점유율(%)', '채택학교수', '담당학교수', '채택학교학생수', '담당학생수']
+                    display_cols = ['지역', '부수(점유율)', '학교점유율(%)', '학생수점유율(%)', '채택학교수', '담당학교수', '채택학교학생수', '담당학생수']
                     display_data = manager_data[display_cols]
-                    
+
                     st.dataframe(
                         display_data.style.format({
                             '학교점유율(%)': '{:.1f}',
@@ -634,6 +645,20 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
                     
                     st.dataframe(
                         pivot_student.style.format('{:.2f}').background_gradient(cmap='RdYlGn', axis=None),
+                        use_container_width=True
+                    )
+                    
+                    # 부수 점유율 비교
+                    st.markdown("#### 📦 부수 점유율 비교")
+                    pivot_orders = region_share_df.pivot_table(
+                        index='지역',
+                        columns='담당자',
+                        values='주문부수점유율(%)',
+                        aggfunc='mean'
+                    ).fillna(0)
+
+                    st.dataframe(
+                        pivot_orders.style.format('{:.2f}').background_gradient(cmap='RdYlGn', axis=None),
                         use_container_width=True
                     )
             else:
