@@ -95,6 +95,36 @@ if '본사담당자(2025.09)' in total_df.columns and '정보공시 학교코드
         st.warning("최소 1명 이상의 담당자를 선택해주세요.")
         st.stop()
     
+    # 도서 코드로부터 제품정보(교과군/교과서명)가 있으면 병합하여 과목 필터를 보강
+    book_code_col = None
+    for col in ['도서코드(교지명구분)', '도서코드', '과목코드']:
+        if col in order_df.columns:
+            book_code_col = col
+            break
+
+    if book_code_col and not product_df.empty and '코드' in product_df.columns:
+        # 필요한 컬럼만 추출
+        prod_cols = []
+        if '교과군' in product_df.columns:
+            prod_cols.append('교과군')
+        if '교과서명' in product_df.columns:
+            prod_cols.append('교과서명')
+        prod_cols.append('코드')
+
+        # 병합 전 형식 통일
+        order_df[book_code_col] = order_df[book_code_col].astype(str)
+        product_merge = product_df[prod_cols].drop_duplicates().copy()
+        product_merge['코드'] = product_merge['코드'].astype(str)
+
+        # left merge로 order_df 보강 (기존 컬럼이 없으면 추가)
+        order_df = pd.merge(
+            order_df,
+            product_merge,
+            left_on=book_code_col,
+            right_on='코드',
+            how='left'
+        )
+    
     # 교과군 필터 추가
     st.sidebar.markdown("---")
     st.sidebar.header("📚 교과군/과목 필터")
